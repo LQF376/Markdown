@@ -3183,6 +3183,8 @@ char b = 'c';
 mySwap(a, b);	// 类型不一致，无法推出 T
 ```
 
+### 普通函数与模板函数
+
 **普通函数与函数模板的区别：**
 
 - 普通函数调用时可以发生自动类型转换（隐式类型转换）
@@ -3198,4 +3200,427 @@ T myAdd(T& a, T& b){
 int a = 10;  char c = 'a';
 myAdd<int>(a, c);		// 可以实现
 ```
+
+普通函数和函数模板的调用规则：
+
+- 如果函数模板和普通模板都可以实现，优先调用普通函数
+- 可以通过空模板参数列表来强制调用函数模板
+- 函数模板也可以发生重载
+- 如果函数模板可以产生更好的匹配，优先调用函数模板
+
+```cpp
+void myPrint(int a, int b);
+
+template<class T>
+void myPrint(T &a, T &b);
+
+myPrint<>(a, b);	// 空模板参数列表，强制调用函数模板
+```
+
+### 函数模板的局限性
+
+在传入参数为数组或者类对象时会出现问题
+
+```cpp
+template<typename T>
+bool myCompare(Person &p1, Person &p2){
+	// ...
+}
+
+class Person{
+public:
+	Person(string name, int age){
+		this->m_Name = name;
+		this->m_Age = age;
+	}
+	string m_Name;
+	int m_Age;
+};
+
+// 1. 使用具体化Person的版本实现代码，具体化优先调用
+template<> bool myCompare(Person &p1, Person &p2){
+	if(p1.m_Name == p2.m_Name && p1.m_Age == p2.m_Age)
+		return ture;
+	else
+		return false;
+}
+
+// 2. 重载运算符的方法也可以实现2个类对象的判等
+```
+
+## 类模板
+
+建立一个通用类，类中的成员数据类型可以不具体指定，用一个虚拟的类型来代表
+
+```cpp
+template<class T>
+class Stack{
+public:
+	void push(T const&);	// 入栈
+	void pop();		// 出栈
+	T top() const;	// 返回栈顶元素
+	bool empty() const{
+		return elems.empty();
+	}
+private:
+	vector<T> elems;	// 元素
+};
+
+template<class T>
+void Stack::push(T const& elem){
+	elems.push_back(elem);
+}
+
+template<class T>
+void pop(){
+	if(elems.empty())
+		throw out_of_range("Stack<>::pop(): empty stack");
+	elems.pop_back();
+}
+
+template<class T>
+T Stack::top() const{
+	if(elems.empty())
+		throw out_of_range("Stack<>::top(): empty stack");
+	return elems.back();
+}
+
+Stack<int> intStack;	// 创建对象
+```
+
+类模板和函数模板的区别：
+
+- 类模板没有自动类型推导的使用方式
+- 类模板在模板参数列表中可以默认参数
+
+```cpp
+template<class NameType, class AgeType = int>
+class Person{};
+
+Person p("Tom", 16);	// 报错，没有自动类型推导
+Person<string> p("Jack", 22);	// 默认参数
+```
+
+### 类模板中成员函数的创建时机
+
+类模板中成员函数和普通类中成员函数创建时机是有区别的：
+
+- 普通类中的成员函数一开始就可以创建
+- 类模板中的成员函数在调用时才创建
+
+### 类模板对象做函数参数
+
+类模板实例化出的对象，向函数传参的方式（3种）：
+
+1. 指定传入的类型 --- 直接显式对象的数据类型
+2. 参数模板化 --- 将对象中的参数变成模板进行传递
+3. 整个类模板化 --- 将这个对象类型模板化进行传递
+
+```cpp
+// 1. 指定传入的类型【使用广泛】
+void printPerson(Person<string, int> &p){
+	// ...	
+}
+
+// 2. 参数模板化
+template<typename T1, typename T2>
+void printPerson2(Person<T1, T2> &p){
+	// ...
+}
+
+// 3. 整个类模板化
+template<typename T>
+void printPerson(T &p){
+	// ...
+}
+```
+
+### 类模板与继承
+
+当类模板遇到继承时，要注意：
+
+- 当子类继承的父类是一个类模板时，子类在声明的时候，要指定出父类中`T`的类型【模板实例化】
+- 如果不指定，编译器无法给子类分配内存
+- 如果想灵活指定出父类中`T`的类型，子类也需要变成类模板
+
+```cpp
+// 1. 指出父类模板中的参数类型
+template<class T>
+class Base{
+public:
+	T t;
+};
+class Son: public Base<int>{ };
+
+// 2. 子类也做类模板处理
+template<class T1, class T2>
+class Son2: public Base<T2>{
+public:
+	T1 obj;
+};
+
+Son2<int, char> s2;
+```
+
+### 类模板成员函数类外实现
+
+类模板中成员函数类外实现时，需要加上模板参数列表
+
+```cpp
+template<class T1, class T2>
+class Person{
+public:
+	Person(T1 name, T2 age);
+	void showPerson();
+	T1 m_Name;
+	T2 m_Age;
+};
+
+template<class T1, class T2>
+Person<T1, T2>::Person(T1 name, T2 age){
+	this->m_Name = name;
+	this->m_Age = name;
+}
+
+template<class T1, class T2>
+void Person<T1, T2>::showPerson(){
+	cout << "..." << endl;
+}
+```
+
+### 类模板份文件编写
+
+类模板中的成员函数创建时机是调用阶段，导致分文件编写时链接不到
+
+解决方法：
+
+1. 直接包含`.cpp`源文件`#include<.cpp>`
+2. 将声明和实现写到同一个文件中，并更改后缀名为`.hpp`，`.hpp`是约定的名称，不是强制
+
+### 类模板和友元
+
+类模板配合友元函数的类内类外实现
+
+- 全局函数类内实现【直接在类内声明友元即可】
+- 全局函数类外实现【需要提前让编译器知道全局函数存在】
+
+```cpp
+template<class T1, class T2>
+class Person{
+	// 1，友元直接在类内实现
+	friend void prientPerson(Person<T1, T2> p){
+		cout << p.m_Name << p.m_Age << endl;
+	}
+	// 2. 友元在类内声明，类外实现
+	friend void printPerson(Person<T1, T2> p);
+public:
+	Person(){}
+private:
+	T1 m_Name;
+	T2 m_Age;
+};
+
+// 2. 类外实现，相当于模板函数
+template<class T1, class T2>
+void printPerson(Person<T1, T2> p){
+    cout << p.m_Name << p.m_Age << endl;
+}
+```
+
+# 预处理器
+
+## `#define`预处理
+
+\#define 预处理指令用于创建符号常量，称为**宏**
+
+```cpp
+#define macro-name replacement-text 
+```
+
+在该文件中后续出现的所有宏都将会在程序编译之前被替换为 replacement-text，需要注意替换后结合性的问题
+
+## 参数宏
+
+```cpp
+#define MIN(a, b) (a>b ? a : b)
+
+int i = 10;
+int j = 100;
+cout << MIN(i, j) << endl;
+```
+
+## 条件编译
+
+根据条件选择性地对部分程序源码进行编译
+
+```cpp
+// 只在调试时进行编译
+#ifdef DEBUG
+	cerr <<"Variable x = " << x << endl;
+#endif
+```
+
+## `#`和`##`运算符
+
+`#`运算符会把 replacement-text 令牌转换为引号引起来的字符串
+
+```cpp
+#define MKSTR( x ) #x
+
+cout << MKSTR(HELLO C++) << endl;		// 输出 HELLO C++
+```
+
+`##`运算符用于连接两个令牌
+
+```cpp
+#define concat(a, b) a ## b
+
+int xy = 100;
+   
+cout << concat(x, y);		// 相当于 xy
+```
+
+## C++ 中的预定义宏
+
+| 宏         | 描述                                                         |
+| ---------- | ------------------------------------------------------------ |
+| `__LINE__` | 这会在程序编译时包含当前行号                                 |
+| `__FILE__` | 这会在程序编译时包含当前文件名                               |
+| `__DATE__` | 这会包含一个形式为 month/day/year 的字符串，它表示把源文件转换为目标代码的日期 |
+| `__TIME__` | 这会包含一个形式为 hour:minute:second 的字符串，它表示程序被编译的时间 |
+
+# 信号处理
+
+信号由操作系统传给进程的中断，会提早终止一个程序
+
+有些信号不能被程序捕获，但是下表所列信号可以在程序中捕获，并可以基于信号采取适当的动作
+
+这些信号定义在头文件`<csignal>`中
+
+| 信号    | 描述                                       |
+| ------- | ------------------------------------------ |
+| SIGABRT | 程序的异常终止，如调用 **abort**           |
+| SIGFPE  | 错误的算术运算，比如除以零或导致溢出的操作 |
+| SIGILL  | 检测非法指令                               |
+| SIGINT  | 程序终止(interrupt)信号                    |
+| SIGSEGV | 非法访问内存                               |
+| SIGTERM | 发送到程序的终止请求                       |
+
+## `signal`函数
+
+C++使用 signal 函数来捕获突发事件
+
+```cpp
+void (*signal(int sig, void (*func)(int)))(int);  // 原型
+```
+
+```cpp
+signal(registered signal, signal handler)
+```
+
+函数接收两个参数：
+
+- 第一个参数是要设置的信号的标识符
+- 第二个参数是指向信号处理函数的指针
+
+返回值是一个指向先前信号处理函数的指针，如果之前没有设置信号处理函数，则返回值为 SIG_DFL
+
+```cpp
+#include <iostream>
+#include <csignal>
+#include <unistd.h>
+ 
+using namespace std;
+ 
+void signalHandler( int signum ){
+    cout << "Interrupt signal (" << signum << ") received.\n";
+ 
+    // 清理并关闭
+    // 终止程序  
+    exit(signum);  
+ }
+ 
+int main (){
+    // 注册信号 SIGINT 和信号处理程序
+    signal(SIGINT, signalHandler);  
+ 
+    while(1){
+       cout << "Going to sleep...." << endl;
+       sleep(1);
+    }
+    return 0;
+}
+```
+
+## `raise`函数
+
+使用`raise`函数生成信号，该函数带有一个整数编号作为参数
+
+```cpp
+int raise (signal sig);
+```
+
+
+
+# STL 标准模板库
+
+标准模板库STL：
+
+- 建立一种可重复使用的东西
+- 建立数据结构和算法的一套标准
+
+STL的六大组件：容器、算法、迭代器、仿函数、适配器、空间配置器
+
+- 容器：提供了各种数据结构，包括向量（vector）、链表（list）、队列（queue）、栈（stack）、集合（set）、映射（map）等。这些容器具有不同的特性和用途，可以根据实际需求选择合适的容器
+- 算法：STL 提供了大量的算法，用于对容器中的元素进行各种操作，包括排序、搜索、复制、移动、变换等。这些算法在使用时不需要关心容器的具体类型，只需要指定要操作的范围即可
+- 迭代器：迭代器用于遍历容器中的元素，允许以统一的方式访问容器中的元素，而不用关心容器的内部实现细节。STL 提供了多种类型的迭代器，包括随机访问迭代器、双向迭代器、前向迭代器和输入输出迭代器等
+- 仿函数【函数对象】：函数对象是可以像函数一样调用的对象，可以用于算法中的各种操作。STL 提供了多种函数对象，包括一元函数对象、二元函数对象、谓词等，可以满足不同的需求
+- 适配器：适配器用于将一种容器或迭代器适配成另一种容器或迭代器，以满足特定的需求。STL 提供了多种适配器，包括栈适配器（stack adapter）、队列适配器（queue adapter）和优先队列适配器（priority queue adapter）等
+- 空间配置器：负责空间的配置和管理
+
+## 容器
+
+STL 中的容器可以分为三类：
+
+1. 序列容器：强调值的排序，序列容器中的每个元素均有固定的位置
+   - `vector`：动态数组，支持快速随机访问
+   - `deque`：双端队列，支持快速插入和删除
+   - `list`：链表，支持快速插入和删除，但不支持随机访问
+2. 关联容器：存储键值对，每个元素都有一个键（key）和一个值（value），并且通过键来组织元素
+   - `set`：集合，不允许重复元素
+   - `multiset`：多重集合，允许多个元素具有相同的键
+   - `map`：映射，每个键映射到一个值
+   - `multimap`：多重映射，允许多个键映射到相同的值
+3. 无序容器（C++11引入）：哈希表，支持快速的查找、插入和删除
+   - `unordered_set`：无序集合
+   - `unordered_multiset`：无序多重集合
+   - `unordered_map`：无序映射
+   - `unordered_multimap`：无序多重映射
+
+## 算法
+
+算法可分为两类：质变算法和非质变算法
+
+- 质变算法：指运算过程中会更改区间内的元素的内容
+- 非质变算法：运算过程中不会更改区间内的元素内容
+
+## 迭代器
+
+迭代器是容器和算法之间的粘合剂
+
+提供一种方法，使之能够依序寻访某个容器所包含的各个元素，而又无需暴露改容器的内部表示方式
+
+每个容器都有自己专属的迭代器
+
+算法要通过迭代器访问容器里面各个元素
+
+| 迭代器种类     | 访问权限                           | 支持操作                                 |
+| -------------- | ---------------------------------- | ---------------------------------------- |
+| 输入迭代器     | 对数据只读访问                     | 只读，支持++，==，!=                     |
+| 输出迭代器     | 对数据只写访问                     | 只写，支持++                             |
+| 前向迭代器     | 读写操作，并能向前推进             | 读写，++，==，!=                         |
+| 双向迭代器     | 读写操作，向前向后操作             | 读写，支持++，--                         |
+| 随机访问迭代器 | 读写操作，可以跳跃方式访问任意数据 | 读写，支持++、--、[n]、- n、<、<=、>、>= |
+
+## `vector`
 
