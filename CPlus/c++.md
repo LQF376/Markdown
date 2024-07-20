@@ -17,7 +17,7 @@ typedef 声明
 
 - 为一个已有的类型取一个新的名字
 
-```
+```cpp
 typedef type newname;
 
 typedef int feet;
@@ -30,7 +30,7 @@ feet distance;		// 合法
 - 默认情况下，第一个名称的值为0，逐后开始递增
 - 内存方面注意**字节对齐**
 
-```
+```cpp
 enum 枚举名{
 	标识符 [=整数常数],
 	标识符 [=整数常数],
@@ -2272,6 +2272,930 @@ cout << s.Base::m_A << endl;	// 访问父类成员
 - 访问父类同名成员，需加作用域
 
 ```cpp
-/* 1.通过对象访问（同非静态成员） */
+/* 1. 通过对象访问（同非静态成员） */
+Son s;
+cout << s.m_A << endl;
+cout << s.Base::m_A << endl;
+
+/* 2. 通过类名访问 */
+cout << Som::m_A << endl;
+cout << Base::m_A << endl;
+// 第一个::代表通过类名方式访问，第二个::代表访问父类作用域下
+cout << Son::Base::m_A << endl;
+```
+
+1. 子类出现同父类同名静态成员函数，也会隐藏父类中所有同名成员函数
+2. 如果想访问父类中被隐藏同名成员，需加作用域
+
+## 多继承语法
+
+```cpp
+class 子类:public 父类1, protected 父类2{
+	// ...
+};
+```
+
+多继承可能会引起父类中有同名成员出现，需加作用域区分
+
+**C++实际开发过程中不建议用多继承**
+
+```cpp
+class Base1{
+	int m_A;
+};
+class Base2{
+	int m_A;
+};
+class Son:public Base1, public Base2{
+	// ....    Son 中有两份继承下来的 m_A
+};
+Son s;
+s.m_A;	// 引发二义性，需加作用域
+s.Base1::m_A;
+```
+
+## 菱形继承
+
+2个派生类同时继承同一个基类，又有某个类同时继承这2个派生类，这种继承被称为**菱形继承**
+
+![image-20240719212709689](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240719212709689.png)
+
+当菱形继承2个父类拥有相同的数据，需要加作用域来区分
+
+实际中，我们只需要一份数据就可以了，菱形继承导致数据有2份，浪费资源
+
+利用虚继承解决菱形继承问题：
+
+- 继承之前加上关键字`virtual`变虚继承
+
+```cpp
+class Animal{
+public:
+	int m_Age;
+};
+
+class Sheep:virtual public Animal{
+};
+
+class Tuo: virtual public Animal{
+};
+
+class SheepTuo: public Sheep, public Tuo{
+};
+
+SheepTuo st;
+cout << st.Sheep::m_Age << endl;
+cout << st.Tuo::m_Age << endl;		// 与上面是同一个 m_Age
+```
+
+总结：
+
+- 菱形继承带来的问题是子类继承两份相同的数据，导致资源浪费以及毫无意义
+- 虚继承可以解决菱形继承问题
+
+**底层实现：**
+
+依靠虚基类指针`vbptr`指向虚基类表`vbtable`，表中依靠偏移量来找到真正的数据
+
+# 多态
+
+多态分为两类：
+
+- 静态多态：函数重载和运算符重载属于静态多态【复用函数名】
+- 动态多态：派生类和虚函数实现运行时多态
+
+静态多态和动态多态的区别：
+
+- 静态多态的函数地址早绑定：编译阶段确定
+- 动态多态的函数地址晚绑定：运行阶段确定
+
+```cpp
+class Animal{
+public:
+	virtual void speak(){
+		cout << "I am Animal" << endl;
+	} 
+};
+
+class Cat:public Animal{
+public:
+	void speak(){
+		cout << "I am Cat" << endl; 
+	}
+};
+
+void doSpeak(Animal &animal){
+	animal.speak();
+}
+
+Cat cat;
+doSpeak(cat);		// 输出 “I am Cat” 多态
+```
+
+动态多态实现条件：
+
+1. 有继承关系
+
+2. 子类重写父类的虚函数
+
+   重写时 函数返回值类型、函数名、参数列表 完全相同；重写时 `virtual`可写可不写
+
+3. 父类的指针或者引用指向子类时，才能启用
+
+动态多态的使用：
+
+- 父类的指针或引用执行子类对象
+
+**底层实现原理：**【重点！！！！】
+
+```cpp
+sizeof(Animal) = 1;				// 无虚函数的版本
+sizeof(virtual Animal) = 4;		// 有虚函数的版本
+```
+
+`Animal`（内部含虚函数版本）类内结构：内部有一个**虚函数指针`vfptr`**，虚函数指针指向**虚函数表`vftable`**，虚函数表中记录虚函数的入口地址，**当子类重写父类的虚函数时，子类中的虚函数表内部会替换成子类的虚函数地址，当父类的指针或者引用指向子类对象时就会发生多态**
+
+```cpp
+/* 多态实现 2 个数计算器功能 */
+class AbstractCalculator{
+public:
+	virtual int getResult(){
+		return 0;
+	}
+	int m_Num1;
+	int m_Num2;
+};
+
+class AddCalculator: public AbstractCalculator{
+	int getResult(){
+		return m_Num1 + m_Num2;
+	}
+};
+
+class SubCalculator: public AbstractCalculator{
+	int getResult(){
+		return m_Num1 - m_Num2;
+	}
+};
+
+AbstractCalculator *abc = new AddCalculator;
+abc->m_Num1 = 10;
+abc->m_Num2 = 10;
+abc->getResult();
+```
+
+多态的好处：
+
+1. 组织结构清晰
+2. 代码可复性强
+3. 后期/前期拓展和维护性高
+
+## 纯虚函数和抽象类
+
+**在多态中，通常父类中函数的实现是毫无意义的【只提供接口规范】，主要都是调用子类重写内容来实现功能**
+
+因此，可以将父类中的虚函数改为**纯虚函数**
+
+```cpp
+virtual 返回值类型 函数名(参数列表) = 0;
+```
+
+当类中有了纯虚函数，这个类被称为**抽象类**
+
+抽象类的特点：
+
+- 无法实例化对象
+- 子类必须重写抽象类中的纯虚函数，否则也属于抽象类
+
+## 虚析构和纯虚析构
+
+多态使用时，**如果子类中有属性开辟到堆区**，那么父类指针在释放时无法调用到子类的析构函数，释放堆区
+
+解决方法：将父类中的析构函数改为**虚析构**或者**纯虚析构**
+
+如果是纯虚析构，该类属于抽象类，无法实例化对象
+
+注意：**纯虚析构函数必须要实现定义**，如果纯虚析构函数没有实现定义，‌链接器在链接阶段会检测到这个问题，‌导致程序无法成功编译和运行
+
+```cpp
+class Animal{
+public:
+	Animal(){
+		cout << "..." << endl;
+	}
+	// virtual ~Animal() = 0;		// 纯虚析构
+	virtual ~Animal(){
+		cout << "..." << endl;
+	}
+};
+// Animal::~Animal(){		// 纯虚析构也必须实现其定义，具体实现（父类是否有在堆区开辟空间）
+// }
+
+class Cat: public Animal{
+public:
+	Cat(String name){
+		m_Name = new string(name);			// 子类在堆区开辟了空间
+	}
+	~Cat(){
+		delete m_Name;
+	}
+	string* m_Name;
+};
+
+Animal *animal = new Cat("Tom");
+delete animal;
+```
+
+总结；
+
+- 虚析构或纯虚析构就是用来解决通过父类指针释放子类对象
+- 如果子类中没有堆区数据，可以不写虚析构和纯虚析构，**纯虚函数也必须写定义**
+- 拥有纯虚析构函数的类也属于抽象类
+
+```cpp
+clasas Cpu{		// 基类提供抽象接口
+public:
+	virtual void calculate() = 0;
+};
+
+class VideoCard{
+public:
+	virtual void display() = 0;
+};
+
+class Memory{
+public:
+	virtual void storage() = 0;
+};
+
+class IntelCpu: public Cpu{
+public:
+	void calculate(){
+		cout << "..." << endl;		// 具体实现
+	}
+};
+
+class HuaWeiVideoCard: public VideoCard{
+public:
+	void display(){
+		cout << "..." << endl;
+	}
+};
+
+class SangsumMemory: public Memory{
+public:
+	void storage(){
+		cout << "..." << endl;
+	}
+};
+
+class Computer{
+public:
+	Computer(Cpu *cpu, VideoCard *vc, Memory *mem){
+		m_Cpu = cpu;
+		m_Vc = vc;
+		m_Mem = mem;
+	}
+	void work(){
+		m_Cpu->calculate();
+		m_Vc->display();
+		m_Mem->storage();
+	}
+	~Computer(){
+		if(m_Cpu != NULL){
+			delete m_Cpu;
+			m_Cpu = NULL;
+		}
+		if(m_Vc != NULL){
+			delete m_Vc;
+			m_Vc = NULL;
+		}
+		if(m_Mem != NULL){
+			delete m_Mem;
+			m_Mem = NULL;
+		}
+	}
+	
+private:
+	Cpu *m_Cpu;
+	VideoCard *m_Vc;
+	Memory *m_Mem;
+}
+```
+
+# 文件和流
+
+程序运行时产生的数据都属于临时数据，程序一旦运行结束都会被释放
+
+通过文件可以将数据持久化
+
+C++对文件操作需要包含头文件`<fstream>`
+
+文件类型分成两种：
+
+- 文本文件：文件以文字的 ASCII 码形式存储在计算机中
+- 二进制文件：文件以文本的二进制形式存储在计算机中，用户一般不能直接读懂它们
+
+操作文件的三大类：【必须包含头文件`<iostream>`和`fstream`】
+
+| 数据类型 | 描述                                                         |
+| -------- | ------------------------------------------------------------ |
+| ofstream | 该数据类型表示输出文件流，用于创建文件并向文件写入信息       |
+| ifstream | 该数据类型表示输入文件流，用于从文件读取信息                 |
+| fstream  | 该数据类型通常表示文件流，且同时具有 `ofstream` 和 `ifstream` 两种功能，这意味着它可以创建文件，向文件写入信息，从文件读取信息。 |
+
+## 打开文件
+
+在从文件读取信息或者向文件写入信息之前，必须先打开文件
+
+- `ofstream` 和 `fstream` 对象都可以用来打开文件进行**写操作**
+- 只需要打开文件进行**读操作**，则使用 `ifstream` 对象
+
+```cpp
+// open() 函数是 fstream、ifstream 和 ofstream 对象的一个成员
+void open(const char *filename, ios::openmode mode);
+```
+
+`filename`：指定要打开的文件的名称和位置
+
+`mode` ：定义文件被打开的模式
+
+| 模式标志    | 描述                                                         |
+| ----------- | ------------------------------------------------------------ |
+| ios::app    | 追加模式。所有写入都追加到文件末尾                           |
+| ios::ate    | 文件打开后定位到文件末尾                                     |
+| ios::in     | 打开文件用于读取                                             |
+| ios::out    | 打开文件用于写入                                             |
+| ios::trunc  | 如果该文件已经存在，其内容将在打开文件之前被截断，即把文件长度设为 0 |
+| ios::binary | 二进制方式                                                   |
+
+注：文件打开方式可以配合使用，利用`|`操作符，二进制写文件`ios::binary | ios::out`
+
+```cpp
+ofstream outfile;
+outfile.open("file.dat", ios::out | ios::trunc);
+```
+
+## 关闭文件
+
+当 C++ 程序终止时，它会自动关闭刷新所有流，释放所有分配的内存，并关闭所有打开的文件，但应养成良好习惯，在程序终止前手动关闭
+
+```cpp
+// close() 函数是 fstream、ifstream 和 ofstream 对象的一个成员
+void close();
+```
+
+## 写入文件
+
+使用流插入运算符 `<< ` 向文件写入信息，使用的是 `ofstream` 或 `fstream` 对象
+
+## 读取文件
+
+使用流提取运算符 `>> ` 从文件读取信息，使用的是 `ifstream` 或 `fstream` 对象
+
+```cpp
+#include <fstream>
+#include <iostream>
+using namespace std;
+ 
+int main ()
+{
+	char data[100];
+ 
+ 	// 以写模式打开文件
+ 	ofstream outfile;
+ 	outfile.open("afile.dat");
+ 	cin.getline(data, 100);
+ 	
+ 	// 向文件写入用户输入的
+ 	outfile << data << endl;
+ 	
+ 	// 关闭打开的文件
+ 	outfile.close();
+ 	
+ 	// 以读模式打开文件
+ 	ifstream infile; 
+ 	infile.open("afile.dat"); 
+ 	
+ 	infile >> data; 
+ 
+ 	// 在屏幕上写入数据
+ 	cout << data << endl;
+   
+   // 再次从文件读取数据，并显示它
+   infile >> data; 
+   cout << data << endl; 
+ 
+   // 关闭打开的文件
+   infile.close();
+ 
+   return 0;
+}
+```
+
+常用读文件的方式
+
+```cpp
+/* 1. */
+char buf[1024] = {0};
+while( ifs >> buf){
+	cout << buf << endl;
+}
+
+/* 2. */
+char buf[1024] = {0};
+while(ifs.getline(buf, sizeof(buf))){
+	cout << buf << endl;
+}
+
+/* 3. */
+string buf;
+while(getline(ifs, buf)){
+	cout << buf << endl;
+}
+
+/* 4. 一个字符一个字符的读（不推荐） */
+char c;
+while((c = ifs.get()) ! EOF){
+	cout << c << endl;
+}
+```
+
+## 二进制文件
+
+以二进制方式对文件进行读写操作
+
+### 写文件
+
+二进制方式写文件主要利用流对象调用成员函数`write`
+
+```cpp
+ofstream& write(const char *buffer, int len);
+```
+
+`buffer`：指向内存中一段存储空间
+
+`len`：读写的字节数
+
+```cpp
+ofstream ofs("person.txt", ios::out | ios::binary);
+
+Person p("张三", 18);
+ofs.write((const char*)&p, sizeof(Person));
+
+ofs.close();
+```
+
+### 读文件
+
+二进制方式读文件主要利用流对象调用成员函数`read`
+
+```cpp
+istream& read(char *buffer, int len);
+```
+
+`buffer`：指向内存中一段存储空间
+
+`len`：读写字节数
+
+```cpp
+ifstream ifs;
+ifs.open("person.txt", ios::in | ios::binary);
+if(!ifs.is_open()){
+	cout << "打开失败/n" << endl;
+}
+ifs.read((char*)&p, sizeof(Person));
+cout << p.m_Name << p.m_Age << endl;
+ifs.close();
+```
+
+## 文件位置指针
+
+`istream` 和 `ostream` 都提供了用于重新定位文件位置指针的成员函数
+
+- `istream` 的 **`seekg`**
+- `ostream` 的 **`seekp`**
+
+`seekg` 和 `seekp` 的参数通常是一个长整型。第二个参数可以用于指定查找方向
+
+| 查找方向     | 描述                       |
+| ------------ | -------------------------- |
+| **ios::beg** | 默认的，从流的开头开始定位 |
+| **ios::cur** | 从流的当前位置开始定位     |
+| **ios::end** | 从流的末尾开始定位         |
+
+```cpp
+// 定位到 fileObject 的第 n 个字节（假设是 ios::beg）
+fileObject.seekg( n );
+ 
+// 把文件的读指针从 fileObject 当前位置向后移 n 个字节
+fileObject.seekg( n, ios::cur );
+ 
+// 把文件的读指针从 fileObject 末尾往回移 n 个字节
+fileObject.seekg( n, ios::end );
+ 
+// 定位到 fileObject 的末尾
+fileObject.seekg( 0, ios::end );
+```
+
+# 异常处理
+
+异常是程序在执行期间产生的问题，C++ 异常是指在程序运行时发生的特殊情况，比如尝试除以零的操作
+
+异常提供了一种转移程序控制权的方式。C++ 异常处理涉及到三个关键字：**try、catch、throw**
+
+- **`throw`**： 当问题出现时，程序会抛出一个异常。这是通过使用 throw 关键字来完成的
+- **`catch`**： 在您想要处理问题的地方，通过异常处理程序捕获异常。catch 关键字用于捕获异常
+- **`try`**：try 块中的代码标识将被激活的特定异常。它后面通常跟着一个或多个 catch 块
+
+**`try` 块中放置可能抛出异常的代码**，try 块中的代码被称为**保护代码**
+
+```cpp
+try{
+   // 保护代码
+}catch( ExceptionName e1 ){
+   // catch 块
+}catch( ExceptionName e2 ){
+   // catch 块
+}catch( ExceptionName eN ){
+   // catch 块
+}
+```
+
+## 抛出异常
+
+您可以使用 `throw` 语句在代码块中的任何地方抛出异常。throw 语句的操作数可以是任意的表达式，表达式的结果的类型决定了抛出的异常的类型
+
+## 捕获异常
+
+**`catch`** 块跟在 **`try`** 块后面，用于捕获异常。您可以指定想要捕捉的异常类型
+
+如果您想让 catch 块能够处理 try 块抛出的任何类型的异常，则必须在异常声明的括号内使用省略号 `...`
+
+```cpp
+try{
+   // 保护代码
+}catch(...){
+  // 能处理任何异常的代码
+}
+```
+
+---
+
+```cpp
+/* demo */
+double division(int a, int b){
+	if( b == 0 ){
+		throw "Division by zero condition!";
+	}
+	return (a/b);
+}
+ 
+int main (){
+	int x = 50;
+	int y = 0;
+	double z = 0;
+	
+	try {
+		z = division(x, y);
+		cout << z << endl;
+	}catch (const char* msg) {
+		cerr << msg << endl;
+	}
+	
+	return 0;
+}
+```
+
+## C++ 标准的异常
+
+C++ 提供了一系列标准的异常，定义在 **`<exception>`** 中，我们可以在程序中使用这些标准的异常
+
+![image-20240720110516827](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240720110516827.png)
+
+| 异常                   | 描述                                                         |
+| ---------------------- | ------------------------------------------------------------ |
+| **std::exception**     | 该异常是所有标准 C++ 异常的父类。                            |
+| std::bad_alloc         | 该异常可以通过 **new** 抛出。                                |
+| std::bad_cast          | 该异常可以通过 **dynamic_cast** 抛出。                       |
+| std::bad_typeid        | 该异常可以通过 **typeid** 抛出。                             |
+| std::bad_exception     | 这在处理 C++ 程序中无法预期的异常时非常有用。                |
+| **std::logic_error**   | 理论上可以通过读取代码来检测到的异常。                       |
+| std::domain_error      | 当使用了一个无效的数学域时，会抛出该异常。                   |
+| std::invalid_argument  | 当使用了无效的参数时，会抛出该异常。                         |
+| std::length_error      | 当创建了太长的 std::string 时，会抛出该异常。                |
+| std::out_of_range      | 该异常可以通过方法抛出，例如 `std::vector` 和 `std::bitset<>::operator[]()`。 |
+| **std::runtime_error** | 理论上不可以通过读取代码来检测到的异常。                     |
+| std::overflow_error    | 当发生数学上溢时，会抛出该异常。                             |
+| std::range_error       | 当尝试存储超出范围的值时，会抛出该异常。                     |
+| std::underflow_error   | 当发生数学下溢时，会抛出该异常。                             |
+
+## 自定义异常
+
+通过继承和重载 exception 类来定义新的异常
+
+```cpp
+#include <iostream>
+#include <exception>
+ 
+class MyException : public exception{
+	const char * what () const throw (){
+		return "C++ Exception";
+	}
+};
+ 
+int main(){
+	try{
+		throw MyException();
+	}
+	catch(MyException& e){
+		std::cout << "MyException caught" << std::endl;
+		std::cout << e.what() << std::endl;
+	}
+	catch(std::exception& e){
+   		//其他的错误
+    }
+}
+```
+
+# 动态内存
+
+C++ 程序中的内存分为两个部分：
+
+- **栈：**在函数内部声明的所有变量都将占用栈内存
+- **堆：**这是程序中未使用的内存，在程序运行时可用于动态分配内存
+
+`new`：为给定类型的变量在运行时分配堆内的内存，这会返回所分配的空间地址
+
+`delete`：不再需要动态分配的内存空间，删除之前由 new 运算符分配的内存
+
+## `new`运算符
+
+new 运算符来为任意的数据类型动态分配内存的通用语法
 
 ```
+new data-type;
+```
+
+如果自由存储区已被用完，可能无法成功分配内存。所以建议检查 new 运算符是否返回 NULL 指针
+
+```cpp
+double *pvalue = NULL;
+if(!(pvalue = new double)){
+	cout << "Error: out of memory." << endl;
+	exit(1);
+}
+```
+
+**`malloc()`** 函数在 C 语言中就出现了，在 C++ 中仍然存在，但建议尽量不要使用 `malloc()` 函数，因为`new`不只是分配了内存，还创建了对象【会主动调用对象的构造函数】
+
+## `delete`运算符
+
+某个已经动态分配内存的变量不再需要使用时，您可以使用 delete 操作符释放它所占用的内存
+
+```cpp
+delete pvalue;        // 释放 pvalue 所指向的内存
+```
+
+## 数组的动态内存分配
+
+```cpp
+// 动态分配,数组长度为 m
+int *array=new int [m];
+ 
+//释放内存
+delete [] array;
+```
+
+二维数组
+
+```cpp
+int **array;
+// 假定数组第一维长度为 m， 第二维长度为 n
+// 动态分配空间
+array = new int *[m];
+for( int i=0; i<m; i++ ){
+    array[i] = new int [n];
+}
+
+//释放
+for( int i=0; i<m; i++ ){
+    delete [] array[i];
+}
+delete [] array;
+```
+
+## 对象的动态内存分配
+
+```cpp
+#include <iostream>
+using namespace std;
+ 
+class Box{
+public:
+    Box(){ 
+        cout << "调用构造函数！" <<endl; 
+    }
+    ~Box(){ 
+        cout << "调用析构函数！" <<endl; 
+    }
+};
+ 
+int main( ){
+    Box* myBoxArray = new Box[4];
+    
+    delete [] myBoxArray; // 删除数组
+    return 0;
+}
+```
+
+# 命名空间
+
+命名空间即定义了上下文，可作为附加信息来区分不同库中相同名称的函数、类、变量等。本质上，就是定义了一个范围。
+
+## 定义命名空间
+
+```cpp
+namespace namespace_name {
+    // 代码声明
+}
+```
+
+调用带有命名空间的函数或变量，需要在前面加上命名空间的名称
+
+```cpp
+name::code;  // code 可以是变量或函数
+```
+
+```cpp
+#include <iostream>
+using namespace std;
+ 
+// 第一个命名空间
+namespace first_space{
+    void func(){
+        cout << "Inside first_space" << endl;
+    }
+}
+// 第二个命名空间
+namespace second_space{
+    void func(){
+        cout << "Inside second_space" << endl;
+    }
+}
+int main (){
+    // 调用第一个命名空间中的函数
+    first_space::func();
+   
+    // 调用第二个命名空间中的函数
+    second_space::func(); 
+ 
+    return 0;
+}
+```
+
+## `using`指令
+
+使用 **`using namespace`** 指令，这样在使用命名空间时就可以不用在前面加上命名空间的名称，编译器会将后续的代码将使用指定的命名空间中的名称
+
+```cpp
+#include <iostream>
+using namespace std;
+ 
+// 第一个命名空间
+namespace first_space{
+    void func(){
+        cout << "Inside first_space" << endl;
+    }
+}
+// 第二个命名空间
+namespace second_space{
+    void func(){
+        cout << "Inside second_space" << endl;
+    }
+}
+using namespace first_space;
+int main (){
+    // 调用第一个命名空间中的函数
+    func();
+
+    return 0;
+}
+```
+
+**using** 指令也可以用来指定命名空间中的特定项目
+
+**using** 指令引入的名称遵循正常的范围规则。名称从使用 **using** 指令开始是可见的，直到该范围结束。此时，在范围以外定义的同名实体是隐藏的
+
+```cpp
+sing std::cout;		// 随后在使用 cout 时就可以不用加上命名空间名称作为前缀，但其他标准库需要
+```
+
+## 不连续的命名空间
+
+一个命名空间的各个组成部分可以分散在多个文件中
+
+如果命名空间中的某个组成部分需要请求定义在另一个文件中的名称，则仍然需要声明该名称
+
+## 嵌套的命名空间
+
+命名空间可以嵌套，您可以在一个命名空间中定义另一个命名空间
+
+```cpp
+namespace namespace_name1 {
+	// 代码声明
+    namespace namespace_name2 {
+        // 代码声明
+    }
+}
+```
+
+通过使用 **::** 运算符来访问嵌套的命名空间中的成员
+
+```cpp
+// 访问 namespace_name2 中的成员
+using namespace namespace_name1::namespace_name2;
+ 
+// 访问 namespace_name1 中的成员
+using namespace namespace_name1;
+```
+
+#  模板
+
+模板是泛型编程的基础，泛型编程即以一种独立于任何特定类型的方式编写代码
+
+模板即通用的模具，大大提高代码的复用性
+
+特点：
+
+- 模板不可以直接使用，他只是一个框架
+- 模板的通用并不是万能的
+
+C++提供两种模板机制：**函数模板**和**类模板**
+
+## 函数模板
+
+建立一个通用函数，其函数返回值类型和形参类型可以不具体指定，用一个虚拟的类型来代表
+
+语法：
+
+```cpp
+template<typename type>
+ret-type func-name(parameter list){
+	// ...
+}
+```
+
+`template`：声明创建模板
+
+`typename`：表示其后面的符号是一种数据类型，可以用 `class` 代替
+
+`type`：通用的数据类型，通常为大写字母
+
+```cpp
+template<typename T>
+void mySwap(T &a, T &b){
+	T temp = a;
+	a = b;
+	b = temp;
+}
+// 使用模板：2种方式使用函数模板
+int a = 1;
+int b = 2;
+mySwap(a, b);			// 1.自动类型推导
+mySwap<int>(a, b);		// 2. 显式指定类型(建议)
+```
+
+函数模板注意事项：
+
+- 自动类型推导，必须推导出一致的数据类型`T`才可使用
+- 模板必须要确定`T`的数据类型，才可使用
+
+```cpp
+template<typename T>
+void mySwap(T &a, T &b){
+	T temp = a;
+	a = b;
+	b = temp;
+}
+int a = 10;
+char b = 'c';
+mySwap(a, b);	// 类型不一致，无法推出 T
+```
+
+**普通函数与函数模板的区别：**
+
+- 普通函数调用时可以发生自动类型转换（隐式类型转换）
+- 函数模板调用时，如果利用自动类型推导，不会发生隐式类型转换
+- 如果利用显式指定类型的方式，可以发生隐式类型转换
+
+```cpp
+template<typename T>
+T myAdd(T& a, T& b){
+	return a + b;
+}
+
+int a = 10;  char c = 'a';
+myAdd<int>(a, c);		// 可以实现
+```
+
