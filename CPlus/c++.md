@@ -4037,6 +4037,8 @@ std::this_thread::sleep_for(dura);
 
 C++11 引入了 `<chrono>` 库，这是一个用于处理时间和日期的库。它提供了一套丰富的工具来测量时间间隔、执行时间点的计算以及处理日期和时间。`<chrono>` 库是 C++ 标准库中处理时间相关操作的核心部分
 
+所有的变量都在 `std::chrono` 命名空间之下
+
 ## 基本概念
 
 **时间点（Time Points）**
@@ -4047,9 +4049,171 @@ C++11 引入了 `<chrono>` 库，这是一个用于处理时间和日期的库�
 
 持续时间表示两个时间点之间的时间间隔
 
+**时钟（Clocks）**
+
+时钟是时间点和持续时间的来源。C++ 提供了几种不同的时钟，例如系统时钟、高分辨率时钟等
+
+## 基本语法
+
+**包含头文件**
+
+```cpp
+#include <chrono>
+```
+
+使用时间点
+
+```cpp
+auto now = std::chrono::system_clock::now();
+```
+
+使用持续时间
+
+```cpp
+auto duration = std::chrono::seconds(5);
+```
+
+计算时间点
+
+```cpp
+auto future_time = now + duration; 
+```
+
+----
+
+```cpp
+// 测量函数执行时间
+#include <iostream>
+#include <chrono>
+
+void someFunction() {
+    // 模拟一些操作
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+int main() {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    someFunction();
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Function took " << duration.count() << " milliseconds to execute." << std::endl;
+
+    return 0;
+}
+```
+
+---
+
+## 处理日期和时间
+
+`std::chrono::system_clock`和 `std::chrono::time_point`来获取当前日期和时间
+
+```cpp
+#include <iostream>
+#include <chrono>
+#include <ctime>
+
+int main(){
+	auto now = std::chrono::system_clock::now();
+	std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+	
+	std::cout << "Current date and time: " << ctd::ctime(&now_c);
+	
+	return 0;
+}
+```
+
+chrono 提供了多种时钟：
+
+- `std::chrono::system_clock`：系统时钟，通常与系统时间同步
+- `std::chrono::steady_clock`：单调时钟，不会受到系统时间变化的影响
+- `std::chrono::high_resolution_clock`：提供最高分辨率的时钟
+
+## `duration 类`
+
+是模板类`template <class Rep, class Period = ratio<1> > class duration`
+
+`duration`对象通过 Rep【count】 和 Period【period】来表示时间跨度
+
+- Rep【count】：表示一种数值类型，用来表示 Period 的数量，比如 int, float, double
+- Period 是 ratio 类型，用来表示一个时间跨度【Rep】的秒数【以秒为单位时间】
+
+`duration`成员函数`count`用来返回 Rep 的数值
+
+常用的 duration 定义在 `std::chrono` 命名空间下
+
+| 类型         | Period               |
+| ------------ | -------------------- |
+| hours        | ratio<3600, 1>       |
+| minutes      | ratio<60, 1>         |
+| seconds      | ratio<1, 1>          |
+| milliseconds | ratio<1, 1000>       |
+| microseconds | ratio<1, 1000000>    |
+| nanoseconds  | ratio<1, 1000000000> |
+
+ratio 类模板原型
+
+```cpp
+template<intmax_t N, intmax_t D = 1> class ratio;
+```
+
+- N：分子，D：分母；ratio 表示一个分数值
+- ration 内部有两个成员常量 `num` 和 `den`，分别表示分子和分母
+
+```cpp
+std::chrono::milliseconds time(100);
+time *= 60;
+time.count();		// 6000
+time.count() * milliseconds::period::num / milliseconds::period::den;		// 转化为秒数
+```
+
+## `std::chrono::duration_cast()`
+
+提供不同 `duration` 之间相互转换，将 `dtn` 的值转化为 `ToDuration`类型对象
+
+```cpp
+template <class ToDuration, class Rep, class Period>
+constexper ToDuration duration_cast(const duration<Rep, Period>& dtn);
+```
+
+```cpp
+std::chrono::seconds s(1);		// 1 秒
+std::chrono::milliseconds ms = std::chrono::duration_cast<std::chrono::milliseconds>(s);
+```
+
+## `std::chrono::time_point`模板类
+
+`std::chrono::time_point`表示一个具体时间
+
+```cpp
+template <class Clock, class Duration = typename Clock::duration> class time_point;
+```
+
+- `Clock`时钟类，例如 `system_clock`、`steady_clock`、`high_resolution_clock`
+- `Duration`：`duration`类型
+
+### 构造函数
+
+- 默认构造函数
+
+- 拷贝构造函数
+
+  从`time_point`构造，构造一个与 tp 相同时间点的对象，仅当 Duration2 可隐式转换为新构造对象的`duration`类型
+
+- 由一个`duration`时间对象构造
+
+```
+time_point();
+template<class Duration2>time_point(const time_point<clock, Duration2>& tp);
+explicit time_point(const duration& dtn)
+```
 
 
-# STL 标准模板库
+
+# STL标准模板库
 
 标准模板库STL：
 
