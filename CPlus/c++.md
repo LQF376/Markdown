@@ -3560,6 +3560,493 @@ int main (){
 int raise (signal sig);
 ```
 
+```cpp
+#include <iostream>
+#include <csignal>
+#include <unistd.h>
+ 
+using namespace std;
+ 
+void signalHandler( int signum ){
+    cout << "Interrupt signal (" << signum << ") received.\n";
+    // 清理并关闭
+    // 终止程序 
+    exit(signum);  
+}
+ 
+int main (){
+    int i = 0;
+    // 注册信号 SIGINT 和信号处理程序
+    signal(SIGINT, signalHandler);  
+ 
+    while(++i){
+        cout << "Going to sleep...." << endl;
+        if( i == 3 ){
+            raise( SIGINT);
+        }
+        sleep(1);
+    }
+ 
+    return 0;
+}
+```
+
+# 多线程
+
+多任务处理允许让电脑同时运行两个或两个以上的程序，一般来说，多任务处理分为两种类型：**基于进程**和**基于线程**
+
+- 基于进程的多任务处理是程序的并发执行
+- 基于线程的多任务处理是同一程序的片段的并发执行
+
+多线程程序包含可以同时运行的两个或多个部分
+
+程序中的每个部分称为一个线程，每个线程定义了一个单独的执行路径
+
+使用 Linux 操作系统，使用 POSIX 编写多线程 C++ 程序
+
+## 创建线程
+
+创建一个 POSIX 线程
+
+```cpp
+#include<pthread.h>
+pthread_create(thread, attr, start_routine, arg);
+```
+
+`thread`：指向线程标识符的指针
+
+`attr`：一个不透明的属性对象，可以被用来设置线程属性。您可以指定线程属性对象，也可以使用默认值 NULL
+
+`start_routine`：线程运行函数起始地址，一旦线程被创建就会执行
+
+`arg`：运行函数的参数。它必须通过把引用作为指针强制转换为 void 类型进行传递。如果没有传递参数，则使用 NULL
+
+返回值：创建线程成功时，函数返回 0，若返回值不为 0 则说明创建线程失败
+
+## 终止线程
+
+终止一个 POSIX 线程
+
+```cpp
+#include <pthread.h>
+pthread_exit(status) 
+```
+
+**pthread_exit** 用于显式地退出一个线程
+
+如果 `main()` 是在它所创建的线程之前结束，并通过 `pthread_exit()` 退出，那么其他线程将继续执行。否则，它们将在 `main()` 结束时自动被终止
+
+### 向线程传递参数
+
+```cpp
+#include <iostream>
+#include <cstdlib>
+#include <pthread.h>
+ 
+using namespace std;
+ 
+#define NUM_THREADS     5
+ 
+struct thread_data{
+    int  thread_id;
+    char *message;
+};
+ 
+void *PrintHello(void *threadarg){
+    struct thread_data *my_data;
+    
+    my_data = (struct thread_data *) threadarg;
+ 
+    cout << "Thread ID : " << my_data->thread_id ;
+    cout << " Message : " << my_data->message << endl;
+ 
+    pthread_exit(NULL);
+}
+ 
+int main (){
+    pthread_t threads[NUM_THREADS];
+    struct thread_data td[NUM_THREADS];
+    int rc;
+    int i;
+ 
+    for( i=0; i < NUM_THREADS; i++ ){
+        cout <<"main() : creating thread, " << i << endl;
+        td[i].thread_id = i;
+        td[i].message = (char*)"This is message";
+        rc = pthread_create(&threads[i], NULL,
+                          PrintHello, (void *)&td[i]);
+        if (rc){
+            cout << "Error:unable to create thread," << rc << endl;
+            exit(-1);
+        }
+    }
+    pthread_exit(NULL);
+}
+```
+
+## 连接和分离线程
+
+```cpp
+pthread_join(threadid, status); 
+pthread_detach(threadid);
+```
+
+## `std::thread`及其成员函数【`<thread>`库】
+
+C++ 11 之后添加了新的标准线程库 **`std::thread`**，在语言层面实现了多线程，程序可移植性大大提高
+
+**`std::thread`** 在 `<thread>` 头文件中声明
+
+```bash
+# 设置编译器使用 c++11 编译
+g++ -std=c++11 test.cpp
+```
+
+### `std::thread`构造函数
+
+**默认构造函数**，创建一个空的 std::thread 执行对象
+
+```cpp
+thread() noexcept;
+```
+
+**初始化构造函数**
+
+创建一个 `std::thread` 对象，该 `std::thread` 对象可被 `joinable`，新产生的线程会调用 `fn` 函数，该函数的参数由 `args` 给出
+
+`Fn`：可调用对象：函数指针/函数对象/Lambda表达式
+
+```cpp
+template<class Fn, Class...Args>
+explict thread(Fn&& fn, Args&&... args);
+```
+
+**拷贝构造函数**（禁用），意味着 `std::thread` 对象不可拷贝构造
+
+```cpp
+thread(const thread&) = delete;
+```
+
+**移动构造函数**，调用成功之后 `x` 不代表任何 `std::thread` 执行对象
+
+```cpp
+thread(thread&& x) noexcept;
+```
+
+注意：可被 `joinable` 的 `thread` 对象必须在他们销毁之前被主线程 `join` 或者将其设置为 `detached`.
+
+---
+
+```cpp
+// 演示多线程的CPP程序
+// 使用三个不同的可调用对象
+#include <iostream>
+#include <thread>
+using namespace std;
+  
+// 一个虚拟函数
+void foo(int Z){
+    for (int i = 0; i < Z; i++) {
+        cout << "线程使用函数指针作为可调用参数\n";
+    }
+}
+  
+// 可调用对象
+class thread_obj {
+public:
+    void operator()(int x)
+    {
+        for (int i = 0; i < x; i++)
+            cout << "线程使用函数对象作为可调用参数\n";
+    }
+};
+  
+int main(){
+    cout << "线程 1 、2 、3 "
+         "独立运行" << endl;
+  
+    // 函数指针
+    thread th1(foo, 3);
+  
+    // 函数对象
+    thread th2(thread_obj(), 3);
+  
+    // 定义 Lambda 表达式
+    auto f = [](int x) {
+        for (int i = 0; i < x; i++)
+            cout << "线程使用 lambda 表达式作为可调用参数\n";
+    };
+  
+    // 线程通过使用 lambda 表达式作为可调用的参数
+    thread th3(f, 3);
+  
+    // 等待线程完成
+    // 等待线程 t1 完成
+    th1.join();
+  
+    // 等待线程 t2 完成
+    th2.join();
+  
+    // 等待线程 t3 完成
+    th3.join();
+  
+    return 0;
+}
+```
+
+### `std::thread`赋值操作
+
+Move 赋值操作：如果当前对象不可 `joinable`，需要传递一个右值引用(`rhs`)给 `move` 赋值操作；如果当前对象可被 `joinable`，则会调用 `terminate`() 报错。
+
+```cpp
+thread& operator=(thread&& rhs) noexcept;
+```
+
+拷贝赋值操作（禁用），`std::thread` 对象不可拷贝赋值
+
+```cpp
+thread& operator=(const thread&) = delete;
+```
+
+### `get_id()`
+
+获取线程 ID，返回一个类型为 `std::thread::id` 的对象
+
+```cpp
+#include <iostream>
+#include <thread>
+#include <chrono>
+
+void foo(){
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+int main(){
+    std::thread t1(foo);
+    std::thread::id t1_id = t1.get_id();
+    
+    std::thread t2(foo);
+    std::thread::id t2_id = t2.get_id();
+
+    std::cout << "t1's id: " << t1_id << '\n';
+    std::cout << "t2's id: " << t2_id << '\n';
+
+    t1.join();
+    t2.join();
+}
+```
+
+### `join()`
+
+回收线程，调用该函数会阻塞当前线程，直到由 *this 所标识的线程执行完毕 join 才返回
+
+为什么需要用 join？
+
+主线程创建两个线程后，三个线程各自走各自的互不干扰，当主线程走完时，这两个线程可能还没走完，即线程仍然存在，又由于线程的对象是在主线程创建的，主线程走完，线程对象便销毁，但子线程还存在这就导致崩溃，所以要加join让主线程先等子线程走完再结束
+
+### `joinable()`
+
+`joinable` 方法主要判断是否可以使用 `join` 方法或者 `detach` 方法，可以返回 `true`，不可以返回 `false`
+
+一个线程最多只能调用一次 `join` 或者 `detach`
+
+```cpp
+#include <iostream>
+#include <thread>
+
+void func(){
+	// ...
+}
+
+int main(){
+	std::thread th1(func);
+	
+	if(th1.joinable())
+		th1.join();
+	else
+		cout << "thread is disjoinable!" << endl;
+}
+```
+
+### `detach()`
+
+`detach`有脱离分离的意思，线程调用该方法可以使得主线程和子线程失去上下级关系，二者平行。子线程运行完毕会自动退出，主线程也无须等待子线程运行完毕
+
+当主线程和子线程并没有产生交集时，可以使子线程进行脱离，运行完毕自动回收
+
+- 举个例子：例如用户登录软件或者Web页面，当账户验证通过时主线程需要继续响应用户的登录请求，而用户的登录日志的保存或者一些其他的日志需要子线程去保存，此时主线程和子线程没有任何交集，总不可能主线程等待子线程存完日志再响应用户吧？因此类似这种情况可以让子线程自动脱离，运行完毕自动结束
+- 类似于驻留后台的守护线程：脱离的子线程由C++运行时库接管，当子线程运行完毕时由运行时库负责清理该线程的相关资源
+
+调用  `detach()` 之后
+
+- `joinable() == false`
+- `get_id() == std::thread::id()`
+
+```cpp
+#include <iostream>
+#include <thread>
+
+void thread_func1(){
+    std::cout << "thread create!" << std::endl;
+}
+int main(){
+    std::thread mythread1(thread_func1);
+    mythread1.detach();
+    std::cout << "main thread executed finish!" << std::endl;
+    return 0;
+}
+```
+
+### `swap()`
+
+`swap()`交换两个线程对象所代表的底层句柄(underlying handles)
+
+```cpp
+#include <iostream>
+#include <thread>
+#include <chrono>
+
+void foo(){
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+void bar(){
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+int main(){
+	std::thread t1(foo);
+	std::thread t2(bar);
+
+	std::cout << "thread 1 id: " << t1.get_id() << std::endl;
+	std::cout << "thread 2 id: " << t2.get_id() << std::endl;
+
+	std::swap(t1, t2);
+
+	std::cout << "after std::swap(t1, t2):" << std::endl;
+	std::cout << "thread 1 id: " << t1.get_id() << std::endl;
+	std::cout << "thread 2 id: " << t2.get_id() << std::endl;
+
+	t1.swap(t2);
+
+	std::cout << "after t1.swap(t2):" << std::endl;
+	std::cout << "thread 1 id: " << t1.get_id() << std::endl;
+	std::cout << "thread 2 id: " << t2.get_id() << std::endl;
+
+	t1.join();
+	t2.join();
+}
+```
+
+### `native_handle`
+
+返回 native handle（由于 std::thread 的实现和操作系统相关，因此该函数返回与 std::thread 具体实现相关的线程句柄）
+
+### `hardware_concurrency[static]`
+
+**`hardware_concurrency [static]`**: 检测硬件并发特性，返回当前平台的线程实现所支持的线程并发数目，但返回值仅仅只作为系统提示
+
+```cpp
+unsigned int n = std::thread::hardware_concurrency();
+cout << n << endl;
+```
+
+## `std::this_thread`命名空间中相关辅助函数介绍
+
+### `get_id()`
+
+获取线程ID
+
+```cpp
+#include <iostream>
+#include <thread>
+#include <chrono>
+#include <mutex>
+
+std::mutex g_display_mutex;
+
+void foo(){
+	std::thread::id t_id = std::this_thread::get_id();
+
+	g_display_mutex.lock();
+	std::cout << "thread id is " << t_id << endl;
+	g_display_mutex.unlock();
+
+	std::this_thread::sleep_for(std::chrono::seconds(1));
+}
+
+
+int main(){
+	std::thread t1(foo);
+	std::thread t2(foo);
+
+	t1.join();
+	t2.join();
+}
+```
+
+### `yield()`
+
+当前线程放弃执行，操作系统调度另一线程继续执行
+
+```cpp
+#include <iostream>
+#include <chrono>
+#include <thread>
+
+// 使当前线程暂停 us 时间
+void little_sleep(std::chrono::microseconds us){
+	auto start = std::chrono::high_resolution_clock::now();
+    auto end = start + us;
+    do {
+        std::this_thread::yield();
+    } while (std::chrono::high_resolution_clock::now() < end);
+}
+
+int main(){
+    auto start = std::chrono::high_resolution_clock::now();
+
+    little_sleep(std::chrono::microseconds(100));
+
+    auto elapsed = std::chrono::high_resolution_clock::now() - start;
+    std::cout << "waited for "
+        << std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count()
+        << " microseconds\n";
+}
+```
+
+### `sleep_until()`
+
+线程休眠至某个指定的时刻（time point），该线程才被重新唤醒
+
+```cpp
+template< class Clock, class Duration>
+void sleep_until( const std::chrono::time_point<Clock,Duration>& sleep_time );
+```
+
+### `sleep_for()`
+
+线程休眠某个指定的时间片（time span），该线程才被重新唤醒，不过由于线程调度等原因，实际休眠时间可能比 `sleep_duration`所表示的时间片更长
+
+```cpp
+std::chrono::milliseconds dura(2000);
+std::this_thread::sleep_for(dura);
+```
+
+# `<chrono>`库
+
+C++11 引入了 `<chrono>` 库，这是一个用于处理时间和日期的库。它提供了一套丰富的工具来测量时间间隔、执行时间点的计算以及处理日期和时间。`<chrono>` 库是 C++ 标准库中处理时间相关操作的核心部分
+
+## 基本概念
+
+**时间点（Time Points）**
+
+时间点表示一个特定的时间点，通常与某个特定的时钟相关联
+
+**持续时间（Durations）**
+
+持续时间表示两个时间点之间的时间间隔
+
 
 
 # STL 标准模板库
