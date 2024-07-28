@@ -5138,6 +5138,63 @@ else{
 }
 ```
 
+## 内建函数对象
+
+STL提供了一些仿函数（函数对象）：
+
+- 算术仿函数
+- 关系仿函数
+- 逻辑仿函数
+
+这些仿函数所产生的对象，用法和一般函数完全相同
+
+使用内建函数对象，需要包含头文件 `#include<functional>`
+
+### 算术仿函数
+
+实现算术运算，其中除了 negate 是一元运算，其他都是二元运算
+
+````cpp
+template<class T> T plus<T>; 	// 加法仿函数
+template<class T> T minus<T>;	// 减法仿函数
+template<class T> T multiplies<T>;		// 乘法仿函数
+template<class T> T divides<T>;			// 除法仿函数
+template<class T> T modulus<T>;			// 取模仿函数
+template<class T> T negate<T>;			// 取反仿函数
+````
+
+```cpp
+#include <functional>
+negate<int> n;
+n(50);		// -50
+
+plus<int> p;
+p(10, 20);		// 30
+```
+
+### 关系仿函数
+
+```cpp
+template<class T> bool equal_to<T>;			// 等于
+template<class T> bool not_equal_to<T>;		// 不等于
+template<class T> bool greater<T>;			// 大于
+template<class T> bool greater_equal<T>;	// 大于等于
+template<class T> bool less<T>;				// 小于
+template<class T> bool less_equal<T>;		// 小于等于
+```
+
+```cpp
+sort(v.begin(), v.end(), greater<int>());			// 实现sort的降序
+```
+
+### 逻辑仿函数
+
+```cpp
+template<class T> bool logical_and<T>;			// 逻辑与
+template<class T> bool logical_or<T>;			// 逻辑或
+template<class T> bool logical_not<T>;			// 逻辑非
+```
+
 
 
 # 排序
@@ -5190,3 +5247,233 @@ Person p2("曹操", 30, 180);
 l.sort(ComparePerson);
 ```
 
+# 智能指针
+
+使用普通指针时，堆内存的申请和释放都有程序员自己管理，容易造成内存泄漏（忘记释放）、二次释放、程序发生异常时内存泄漏的问题，所以C++11引入智能指针
+
+c++ 引入异常概念后，程序的控制流就发生了根本性的改变，在写了 delete 的时候还是可能会发生内存泄漏，如下例：
+
+```cpp
+void badThing(){
+    throw 1;		// 抛出一个异常
+}
+
+void test(){
+    char* a = new char[1000];
+    badThing();
+    delete[] a;
+}
+
+int main(){
+    try{
+        test();
+    }
+    catch(int i){
+        cout << "error happened " << i << endl;
+    }
+}
+```
+
+`new` 和 `delete` 成对出现了，但是程序抛出异常时，程序并未执行到 `delete` 造成内存泄漏
+
+## 利用构造函数和析构函数解决内存泄漏问题
+
+利用构造函数和析构函数可以解决上述问题的产生
+
+```cpp
+class SafeIntPointer{
+public:
+    explicit SafeIntPointer(int v): m_value(new int(v)) { }
+    ~SafeIntPointer() {
+        delete m_value;
+        cout << "~SafeIntPointer()" << endl;
+    }
+    int get() {return *m_value};
+private:
+    int* m_value;  
+};
+
+void badThing(){
+    throw 1;	 // 抛出异常
+}
+
+void test(){
+    SafeIntPointer a(5);
+    
+    badThing();
+}
+
+int mainj(){
+    try{
+        test();
+    }
+    catch(int i){
+        cout << "error happened" << i << endl;
+    }
+}
+// 结果
+// ~SafeIntPointer
+// error happened 1
+```
+
+就算发生了异常，也能保证析构函数成功执行
+
+若一份资源被多人共同使用，要等到所有人都不再使用的时候才能释放掉，对于上述问题需要增加一个引用计数
+
+```cpp
+class SafeIntPointer{
+public:
+    explicit SafeIntPointer(int v): m_value(new int(v)), m_use(new int(1)) { }
+    ~SafeIntPointer(){
+        cout << "~SafeIntPointer()" << endl;
+        (*m_used) --;		// 引用计数减 1
+        if(*m_used <= 0){
+            delete m_value;
+            delete m_used;
+            cout << "real delete resources" << endl;
+        }
+    }
+    SafeIntPointer(const SafeIntPointer& other){
+        m_used = other.m_used;
+        m_value = other.m_value;
+        (*m_used) ++;		// 引用计数+1
+    }
+    SafeIntPointer& operator=(const SafeIntPointer& other){
+        if(this == &other)	// 避免自我赋值
+            return *this;
+        
+        m_used = other.m_used;
+        m_value = other.m_value;
+        (*m_used) ++;		// 引用计数+1
+        return *this;
+    }
+    int get() {return *m_value;}
+    int getRefCount() {return *m_used;}
+    
+private:
+    int* m_used;	// 引用计数
+    int* m_value;
+};
+
+SafeIntPointer a(5);
+SafeIntPointer b = a;
+SafeIntPointer c = b;
+```
+
+上述例子不是线程安全的！！
+
+C++11引入智能指针，利用 RAII（资源获取即初始化）的技术将普通指针封装为一个栈对象。当栈对象的生存周期结束后，会在析构函数中释放掉申请的内存，从而防止内存泄漏。
+
+实质是一个封装了原始指针的智能对象
+
+智能指针主要为`shared_ptr`、`unique_ptr`、`weak_ptr` 三种，使用需要引用头文件`<memory>`，参考 `boost`库实现
+
+C++98 中还有 `auto_ptr`，基本淘汰，不推荐使用
+
+## shared_ptr
+
+- 可以被多个指针共享同一个资源，资源的引用计数会被自动管理，引用计数为0时自动释放
+
+最安全的分配和使用动态内存的方法是调用一个名为 `make_shared` 的标准库函数，定义在 `<memory>` 中
+
+此函数在动态内存中分配一个对象并初始化它，返回指向此对象的 `shared_ptr`
+
+```cpp
+shared_ptr<int> p3 = make_shared<int> (42);		// 指向值为42的int的shared_ptr
+
+shared_ptr<string> p4 = make_shared<string>(10, '9');		// 指向值为 “9999999999” 的 string
+
+shared_ptr<int> p5 = make_shared<int> ();			// 指向一个初始化的int
+```
+
+可以用`new`返回的指针来初始化智能指针，不过接受指针参数的智能指针构造函数是 explicit 的，因此，不能将一个内置指针隐式转换为一个智能指针，必须使用直接初始化形式来初始化一个智能指针：
+
+```cpp
+shared_ptr<int> p1 = new int(1024);		// 错误，必须使用直接初始化形式
+shared_ptr<int> p2(new int(1024));		// 正确：使用了直接初始化形式
+```
+
+```cpp
+class Test{
+public:
+	Test(){
+		cout << "Test()" << endl;
+	}
+	~Test(){
+		cout << "~Test()" << endl;
+	}
+};
+
+share_ptr<Test> p1 = make_shared<Test>();
+cout << "1 ref：" << p1.use_count() << endl;
+{
+	shared_ptr<Test> p2 = p1;
+	cout << "2 ref：" << p1.use_count() << endl;
+}
+cout << "3 ref:" << p1.use_count() << endl;
+
+//Test()
+//1 ref:1
+//2 ref:2
+//3 ref:1
+//~Test()
+```
+
+shared_ptr 独有的常规操作
+
+```cpp
+make_shared<T> (args)	// 返回一个 shared_ptr，指向一个动态分配的类型为T的对象，使用args初始化此对象
+shared_ptr<T> p(q)		// p是shared_ptr q 的拷贝，此操作会递增q中的引用计数，q中指针必须能转换T*
+p = q	// p和q都是shared_ptr，所保存的指针必须能相互转换，此操作会递减p中引用计数，递增q中引用计数。
+		// 若p中引用计数变为0，则将其管理的原内存释放
+p.unique()	// 若 p.use_count() 为1，返回 ture；否侧返回 false
+p.use_count()	// 返回与p共享对象的智能指针数量；可能很慢，主要用于调试
+```
+
+改变 `shared_ptr` 的其他方法：
+
+```cpp
+p.reset()		// 若p是唯一指向其对象的shared_ptr，reset会释放此对象
+p.reset(q)		// 若传递了可选的参数内置指针q，会令p指向q，否则会将p置为空
+p.reset(q, d)	// 若还传递了参数d，将会调用d，而不是delete来释放q
+```
+
+shared_ptr 循环引用会导致堆内存无法正确释放，导致内存泄漏
+
+```cpp
+class Parent;		// Person 类的前置声明
+
+class Child{
+public:
+	Child() {cout << "hello child" << endl;}
+	~Child() {cout << "bye child" << endl;}
+	
+	shared_ptr<Parent> father;
+};
+
+class Parent{
+public:
+	Parent() {cout << "hello Parent" << endl;}
+	~Parent() {cout << "bye parent" << endl;}
+	
+	shared_ptr<Child> son;
+};
+
+int main(){
+    shared_ptr<Parent> parent(new Parent());		// 资源A
+	shared_ptr<Chlid> child(new Child());			// 资源B
+	parent->son = child;		// 资源B的引用计数为2，资源A的引用计数为1
+	child->father = parent;		// 资源A 的引用计数为2，资源B的引用计数为2
+}
+// 程序结束，析构函数不会被调用，内存没有被释放
+```
+
+## weak_ptr
+
+- 为了解决循环引用问题，引入 `weak_ptr`
+- `weak_ptr` 被设计为与 `shared_ptr` 共同工作，可以从一个 `shared_ptr` 或者另一个 `weak_ptr` 对象构造，获得资源的观测权。但 `weak_ptr` 没有共享资源，它的构造不会引起指针引用计数的增加
+- 同理，`weak_ptr` 析构时也不会导致引用计数的减少，它只是一个观察者
+- `weak_ptr` 没有重载 `operator*` 和 `->`，这是特意的，因为它不共享指针，不能操作资源，这是它弱的原因
+- 如要操作资源，则必须使用一个非常重要的成员函数 `lock()` 从被观测的 `shared_ptr` 获得一个可用的 `shared_ptr` 对象，从而操作资源
+
+独占式智能指针，确保了只有一个指针可以指向资源，`std::move()`将资源所有权转移给其他 unique_ptr
