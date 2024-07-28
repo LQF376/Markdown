@@ -1,4 +1,4 @@
-# 1. 数据类型
+数据类型
 
 - 给变量分配合适的内存
 
@@ -4416,5 +4416,777 @@ string(const char* s);		// 使用字符串s初始化
 string(const string& str);	// 使用一个 string 对象初始化
 string(const string& str, pos = 0, npos);		// str中从pos开始npos的string
 string(int n, char c);		// 使用 n 个字符 c 初始化
+```
+
+### string 赋值操作
+
+````cpp
+string& operator=(const char* c);	// 将 char* 类型的字符串赋值给当前字符串
+string& operator=(const string& s);	// 将字符串s赋给当前字符串
+string& operator=(char c);			// 字符赋值给当前的字符串
+
+string& assign(const char* s);		// 将 char* 类型的字符串赋值给当前字符串
+string& assign(const char* s, int n);		// 把字符串s的前n个字符赋值给当前字符串
+string& assign(const string& s);	// 把字符串 s 赋值给当前的字符串
+string& assign(int n, char c);		// 把n个字符c赋值给当前字符串
+````
+
+```cpp
+// 1.
+string str1;
+str1 = "helloworld!";
+// 2.
+string str2;
+str2 = str1;
+// 3. 
+string str3;
+str3 = 'a';
+// 4.
+string str4;
+str4.assign("hello C++");
+// 5. 
+string str5;
+str5.assign("hello C++", 5);
+// 6.
+string str6;
+str6.assign(str5);
+// 7.
+string str7;
+str7.assign(4, 'c');
+```
+
+### string 字符串拼接
+
+```cpp
+string& operator+=(const char* str);
+string& operator+=(const char c);
+string& operator+=(const string& str);
+string& append(const char* s);				// 把字符串s连接到当前字符串结尾
+string& append(const char* s, int n);		// 把字符串s的前n个字符连接到当前字符串结尾
+string& append(const string& s);
+string& append(const string& s, int pos, int n);	// 字符串s中从pos开始的n个字符连接到末尾
+```
+
+### string 查找和替换
+
+查找：查找指定字符串是否存在
+
+- `find`查找第一次出现；`rfind`查找最后一次出现
+- `find`找到字符串后返回查找的第一个字符位置，找不到返回 -1
+
+```cpp
+// 1. 查找str第一次出现的位置，从pos开始查找
+int find(const string& str, int pos = 0) const;
+// 2. 查找字符串s 第一次出现的位置，从pos开始查找
+int find(const char* s, int pos = 0)const;
+// 3. 从 pos 位置开始查找s的前n个字符第一次位置
+int find(const char* s, int pos = 0, int n)const;
+// 4. 查找字符c第一次出现位置，从pos位置开始
+int find(const char c, int pos = 0)const;
+// 5. 查找str最后一次位置，从pos开始查找
+int rfind(const string& str, int pos = npos)const;
+// 6. 查找字符串s最后一次出现位置，从pos开始查找
+int rfind(const char* s, int pos = npos)const;
+// 7. 从pos查找字符串s的前n个字符最后一次位置
+int rfind(const char* s, int pos, int n)const;
+// 8. 查找字符c最后一次出现位置
+int rfind(const char c, int pos = 0)const;
+```
+
+替换：在指定的位置替换字符串
+
+- `replace` 在替换时，要指定从哪个位置起，多少字符，替换成什么样的字符串
+
+```cpp
+// 1. 从 pos 位置开始 n 个字符替换为 str
+string& replace(int pos, int n, const string& str);
+// 2. 从 pos 位置开始 n 个字符替换为字符串 s
+string& replace(int pos, int n, const char* s);
+```
+
+### string 字符串比较
+
+运算符比较：按字符的ASCII码进行比较
+
+- `=` 返回 0
+- `>` 返回 1
+- `<` 返回 -1
+
+```cpp
+int compare(const string& s)const;
+int compare(const char* s)const;
+```
+
+```cpp
+string str1 = "hello";
+string str2 = "hello";
+str1.compare(str2);
+```
+
+### string 字符存取
+
+string 中字符存取方式有2种：
+
+```cpp
+char& operator[](int n);
+char& at(int);
+```
+
+### string 插入和删除
+
+```cpp
+// 在指定的位置上插入字符串
+string& insert(int pos, const char* s);
+string& insert(int pos, const string& str);
+// 在指定的位置上插入n个字符c
+string& insert(int pos, int n, char c);
+// 删除从 pos 开始的n个字符
+string& erase(int pos, int n = npos);
+```
+
+### string 子串
+
+```cpp
+string substr(int pos = 0, int n = npos)const;		// 返回由 pos 开始的n个字符组成的字符串
+```
+
+### 其他成员函数
+
+```cpp
+// 获取字符串长度
+size();
+length();
+```
+
+## deque
+
+双端队列，允许在两端进行插入和删除的线性数据结构；是需要频繁插入和删除元素场景的理想选择
+
+`deque`与`vector`区别：
+
+- `vector`对于头部插入删除效率低，数据量越大，效率就越低
+- `deque`相对而言，对头部插入删除速度比`vector`快
+- `vector`访问元素时速度会比`deque`快，这和两者内部实现有关
+
+![image-20240723200536726](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240723200536726.png)
+
+### `deque`内部工作原理
+
+`deque` 内部有一个中控器，维护每段缓冲区中的内容，缓冲区中存放真实数据
+
+中控器维护的是每个缓冲区的地址，使得使用`deque`时像一片连续的内存空间
+
+![image-20240723201542268](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240723201542268.png)
+
+`deque`容器的迭代器也是支持随机访问的
+
+**包含头文件**
+
+```cpp
+#include<deque>
+```
+
+### deque 构造函数
+
+```cpp
+deque<T> deq;		// 默认构造函数
+deque(beg, end);	// 将[beg, end)区间的元素拷贝给自身
+deque(n, elem);		// 将 n 个 elem 拷贝给本身
+deque(const deque &deq);	// 拷贝构造函数
+```
+
+```cpp
+deque<int> d1;
+deque<int> d2(d1,begin(), d1.end());
+deque<int> d3(10, 100);
+deque<int> d4(d3);
+```
+
+### 赋值操作
+
+```cpp
+deque& operator=(const deque &deq);		// 重载 = 运算符
+assign(beg, end);				// 将[beg, end)数据拷贝到自身
+assign(n, elem);				// 将 n 个elem拷贝赋值给本身 
+```
+
+```cpp
+deque<int> d1;
+deque<int> d2;
+d2 = d1;
+d2.assign(d1.begin(), d1.end());
+d2.assign(10, 100);
+```
+
+### 大小操作
+
+```cpp
+deque.empty();			// 判断容器是否为空
+deque.size();			// 返回容器中元素的个数
+deque.resize(num);			// 重新指定容器的长度为 num,若容器变长，则以默认值填充新位置
+							// 若容器变短，则末尾超出容器长度的元素被删除
+deque.resize(num, elem);	// 重新指定容器的长度为 num,若容器变长，则以elem值填充新位置
+							// 若容器变短，则末尾超出容器长度的元素被删除
+```
+
+### 插入和删除
+
+两端插入操作
+
+````cpp
+push_back(elem);			// 尾部添加一个数据
+push_front(elem);			// 头部添加一个数据
+pop_back(elem);				// 删除容器最后一个数据
+pop_front(elem);			// 删除容器第一个数据
+````
+
+```cpp
+deque<int> d1;			// 200 100 10 20
+d1.push_back(10);
+d1.push_back(20);
+d1.push_front(100);
+d1.push_front(200);
+d1.pop_back();		// 20
+d1.pop_front();		// 200
+```
+
+指定位置操作
+
+```cpp
+insert(pos, elem);			// 在 pos 位置上插入elem元素，返回新数据位置
+insert(pos, n, elem);		// 在 pos 位置上插入n个elem数据，无返回值
+insert(pos, beg, end);		// 在 pos 位置上[beg, end)区间的数据，无返回值
+```
+
+删除操作
+
+```cpp
+clear();			// 清空容器的所有数据
+erase(beg, end);	// 删除 [beg, end) 区间的数据，返回下一个数据的位置
+erase(pos);			// 删除 pos 位置的数据，返回下一个数据的位置
+```
+
+### 数据存取	
+
+```cpp
+at(int idx);		// 返回索引idx所指的数据
+operator[];			// 返回索引所指的数据
+front();			// 返回第一个数据元素
+back();				// 返回最后一个数据元素
+```
+
+## Stack 栈
+
+stack 是一种先进后出【FILO】的数据结构
+
+- 栈不允许有遍历行为，只能操作栈顶的元素
+- 栈可以判空，返回个数
+
+![image-20240723221949631](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240723221949631.png)
+
+### 常用接口
+
+```cpp
+stack<T> stk;					// stack 默认的构造函数
+stack(const stack& stk);		// 拷贝构造函数
+```
+
+赋值操作
+
+```cpp
+stack& operator=(const stack& stk);		// 重载 = 操作符
+```
+
+数据存取
+
+```cpp
+push(elem);		// 栈顶添加元素（入栈）
+pop();			// 栈顶移除第一个元素
+top();			// 返回栈顶元素
+```
+
+大小操作
+
+```cpp
+empty();		// 判断栈是否为空
+size();			// 返回栈的大小
+```
+
+## queue 队列
+
+一种先进先出（First In First Out）的数据结构
+
+![image-20240724195028762](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240724195028762.png)
+
+队列容器允许从一段新增元素，从另一端移除元素
+
+队列中只有队头和队尾才可以被外界使用，因此队列不允许有遍历行为
+
+### queue 常用接口
+
+构造函数及拷贝构造
+
+```cpp
+queue<T> que;
+queue(const queue& que);
+```
+
+赋值操作：
+
+```cpp
+queue& operator=(const queue& que);			// 重载 = 运算符
+```
+
+数据存取：
+
+```cpp
+push(elem);			// 往队尾中添加元素 入队
+pop();				// 从队头移除第一个元素 出队
+back();				// 返回最后一次元素（队尾）
+front();			// 返回第一个元素（队头）
+```
+
+大小操作：
+
+```cpp
+empty();		// 判断队列是否为空
+size();			// 返回栈的大小
+```
+
+## list 链表
+
+链表 list 是一种物理存储单元上非连续的存储结构，数据元素的逻辑顺序是通过链表中的指针指向实现的
+
+链表是由一系列的结点组成
+
+结点由存储数据元素的**数据域**和存储下一个结点地址的**指针域**组成
+
+![image-20240724201859456](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240724201859456.png)
+
+STL中的链表是一个双向循环链表
+
+- 优点：可以在任何位置进行快速插入或删除元素
+  - 动态存储分配，不会造成内存浪费和溢出
+  - 链表执行插入和删除操作十分方便，修改指针即可，不需要移动大量元素
+- 缺点：容器遍历速度没有数组快，占用空间较大
+  - 链表灵活，但是空间（指针域）和时间（遍历）额外耗费较大
+
+由于链表的存储方式并不是连续的内存空间，因此链表 list 中的迭代器只支持前移和后移，属于双向迭代器
+
+list插入和删除操作都不会造成原有list迭代器的失效，在 vector 中是不成立的
+
+```cpp
+#include <list>
+```
+
+### 构造函数
+
+```cpp
+list<T> list;					// 默认构造函数
+list(beg, end);					// 将[beg, end) 区间中的元素拷贝给本身
+list(n, elem);					// 将 n 个elem拷贝给本身
+list(const list& list);			// 拷贝构造函数
+```
+
+````cpp
+list<int> l1;
+list<int> l2 (l1.begin(), l1.end());
+list<int> l3(l2);
+list<int> l4(10, 1000);
+````
+
+### 赋值和交换操作
+
+```cpp
+assign(beg, end);	// 将{beg, end)区间中的数据拷贝赋值
+assign(n, elem);	// 将 n 个 elem 拷贝赋值给本身
+list& operator=(const list& list);		// 重载=运算符
+swap(lst)								// 将 lst 与本身的元素交换
+```
+
+### 大小操作
+
+```cpp
+size();			// 返回容器中元素的个数
+empty();		// 判断容器是否为空
+resize(num);	// 重新指定容器长度为num，若容器变长，以默认值填充；容器变短，超出长度元素被删除
+resize(num, elem);	// 重新指定容器长度为num，若容器变长，以elem值填充；容器变短，超出长度元素被删除
+```
+
+### 插入和删除
+
+```cpp
+push_back(elem);			// 尾部插入一元素
+pop_back();					// 删除容器中最后一个元素
+push_front(elem);			// 在容器头部插入一个元素
+pop_front();				// 从容器开头移除第一个元素
+insert(pos, elem);			// 在pos位置插入 elem 元素拷贝，返回新数据位置
+insert(pos, n, elem);		// 在pos位置插入n个elem，无返回
+insert(pos, beg, end);		// 在pos位置插入[beg, end)区间数据，无返回
+clear();			// 移除所有数据
+erase(beg, end);		// 删除[beg, end) 区间数据，返回下一个数据位置
+erase(pos);			// 删除pos位置，数据返回下一个数据的位置
+remove(elem);		// 删除容器中所有与elem值匹配的元素
+```
+
+### 数据存取
+
+list 本质是链表，不是用连续线性空间存储数据，迭代器不支持随机访问的
+
+- 不可以用`[]`访问 list 容器中的元素
+- 不可以用`.at()`访问 list 容器中的元素
+
+```cpp
+front();		// 返回第一个元素
+back();			// 返回最后一个元素
+```
+
+中间的元素访问需要借助迭代器，利用 `++` `--` 进行访问
+
+```cpp
+list<T>::iterator it = l1.begin();
+it++;
+it--;
+it = it + 1;
+```
+
+### 反转和排序
+
+````cpp
+reverse();		// 反转链表
+sort();			// 链表排序，默认是升序
+````
+
+注意：list 不支持随机访问迭代器，所以不支持全局函数 `sort()` 但其内部会提供对应一些算法
+
+```cpp
+l1.sort();		// 从小到大，升序
+
+bool myCompare(int v1, int v2){
+	return v1 > v2;
+}
+
+l1.sort(myCompare);		// 仿函数实现降序排序
+```
+
+## set/multiset/unordered_set
+
+属于关联式容器，底层结构是用二叉树实现的
+
+set/multiset：所有元素都会在插入时自动被排序【升序】
+
+- set：不允许容器中有重复的元素，插了不报错，相当于没有；`set` 插入数据的同时会返回插入结果，表示插入是否成功
+- multiset：允许容器中有重复的元素；`multiset` 不会检测数据，因此可以插入重复数据
+
+unordered_set：相对于`set`而言，取消了自动排序的功能
+
+### 头文件包含
+
+```cpp
+#include <set>				// set && mutiset
+#include <unordered_set>	// unordered_set
+```
+
+### 构造和赋值
+
+```cpp
+/* 构造 */
+set<T> st;			// 默认的构造函数
+set(const set& st);			// 拷贝构造函数
+
+/* 赋值 */
+set& operator=(const set& st);
+```
+
+### 大小和交换
+
+```cpp
+size();				// 返回容器中元素的数目
+empty();			// 判断容器是否为空
+swap(st);			// 交换两个集合容器
+```
+
+### 插入和删除
+
+```cpp
+insert(elem);		// 在容器中插入元素
+clear();			// 清空所有元素
+erase(pos);			// 删除pos迭代器所指的元素，返回下一个元素的迭代器
+erase(beg, end);	// 删除区间[beg, end)的所有元素返回下一个元素的迭代器
+erase(elem);		// 删除容器中值为 elem 的元素
+```
+
+`set` 插入数据的同时会返回插入结果
+
+````cpp
+set<int> st;
+pair<set<int>::iterator, bool> ret = st.insert(10);
+*ret.first;		// *it      10
+ret.second;		// 1
+````
+
+
+
+### 查找和统计
+
+对 set 容器进行查找数据以及统计数据
+
+- `set` 容器的 `count()` 只有 0 和 1，`set` 不支持重复的数插入，`multiset` 可以返回 `count()` 个数
+
+```cpp
+find(key);		// 查找 key 是否存在，存在，返回该键的元素迭代器；若不存在，返回 set.end()
+count(key);		// 统计 key 元素的个数
+```
+
+### 修改 set 默认排序顺序
+
+set 容器默认排序规则为从小到大
+
+```cpp
+// 仿函数
+class MyCompare{
+public:
+	bool operator()(int v1, int v2){
+		return v1 > v2;
+	}
+};
+
+set<int, MyCompare> s2;		// 想改变set的排序顺序，必须一开始创建对象时就设定
+```
+
+### set 自定义数据类型排序
+
+```cpp
+#include <set>
+#include <string>
+
+class Person{
+public:
+	Person(string name, int age){
+		this->m_Name = name;
+		this->m_Age = age;
+	}
+	
+	string m_Name;
+	int m_Age;
+};
+class comparePerson{
+public:
+	bool operator()(const Person& p1, const Person& p2){
+		return p1.m_Age > p2.m_Age;
+	}
+};
+```
+
+## pair 对值
+
+成对出现的数据，利用对值可以返回两个数据
+
+### 创建方式
+
+```cpp
+pair<type, type> p (value1, value2);
+pair<type, type> p = make_pair(value1, value2);
+```
+
+```cpp
+pair<string, int> p("Tom", 20);
+cout << p.first << p.second << endl;
+
+pair<string, int> p2 = make_pair("Jerry", 30);
+```
+
+## map/multimap/unordered_map
+
+### 基本概念
+
+- `map` 中所有元素都是 pair
+- pair 中第一个元素为 `key`（键值），起到索引作用，第二个元素为 `value`
+- 所有元素都会根据元素的键值自动排序
+
+map 和 multimap 属于关联式容器，底层结构是二叉树实现
+
+区别：
+
+- `map`：不允许容器中有重复的 key 值元素
+- `multimap`：允许容器中有重复的 key 值元素
+
+### 构造函数和赋值
+
+```cpp
+/* 构造 */
+map<T1, T2> map;			// 默认构造函数
+map(const map &mp);			// 拷贝构造函数
+
+/* 赋值 */
+map& operator=(const map& mp);
+```
+
+### 大小和交换
+
+```cpp
+size();			// 返回容器中元素的数目
+empty();		// 判断容器是否为空
+swap(st);		/// 交换2个集合容器
+```
+
+### 插入和删除
+
+```cpp
+insert(elem);	// 在容器中插入元素
+clear();		// 清空所有元素
+erase(pos);		// 删除迭代器所指的元素，返回下一个元素的迭代器
+erase(beg, end);	// 删除区间[beg, end)的所有元素，返回下一个元素的迭代器
+erase(key);			// 删除容器中值为key的元素
+```
+
+常用插入方式：
+
+- `[]`不建议用来访问，建议用来插入或删除，`[]`若用到一个不存在数据会为你创建一个0数据
+
+```cpp
+m.insert(pair<int, int> (1, 10));
+m.insert(make_pair(2, 10));
+m.insert(map<int, int>::value_type(3. 10));
+m[4] = 10;		// 不建议使用
+cout << m[5] << endl;	// 不建议用 [] 来访问，没有会创建一个出来，默认0
+```
+
+### 查找和统计
+
+- `map` 不允许插入重复 key，`count()` 统计而言，结果要么是 0，要么是 1
+- `multimap` 的 `count()` 可能大于 1
+
+```cpp
+find(key);		// 查找 key 是否存在，存在返回该键的元素的迭代器，不存在返回 set.end() 迭代器
+count(key);		// 统计 key 的元素个数
+```
+
+`find()` 返回的是迭代器，`*it` 是 pair 类型
+
+```cpp
+map<int, int>::iterator pos = m.find(3);
+pos->first;
+pos->second;
+```
+
+### map 排序
+
+map 默认排序规则：按照 key 值进行从小到大排序
+
+```cpp
+class MyCompare{
+public:
+	bool operator() (int v1, int v2){
+		return v1 > v2;
+	}
+};
+
+map<int, int, MyCompare> m;
+```
+
+ # 函数对象（仿函数）
+
+概念：
+
+- 重载函数调用操作符的类，其对象常称为**函数对象**
+- 函数对象在使用重载`()`时，行为类似函数调用，也叫**仿函数**
+
+本质上：函数对象（仿函数）是一个类，不是一个函数
+
+函数对象的使用：
+
+- 函数对象在使用时，可以像普通函数那样调用，可以有参数，可以有返回值
+- 函数对象超出普通函数的概念，函数对象可以有自己的状态【本质是类，可以有成员属性来记录】
+- 函数对象可以作为参数传递【写法灵活】
+
+```cpp
+class MyAdd{
+public:
+	int operator()(int v1, int v2){
+		return v1 + v2;
+	}
+};
+MyAdd myadd;
+cout << myadd(10, 10) << endl;
+```
+
+## 谓词
+
+概念：
+
+- 返回 bool 类型的仿函数称为**谓词**
+- 如果 `operator()` 接收一个参数，叫做**一元谓词**
+- 如果 `operator()` 接收两个参数，叫做**二元谓词**
+
+```cpp
+class GreaterFive{
+public:
+	bool operator()(int val){
+		return val > 5;
+	}
+};
+
+vector<int> v {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+
+vector<int>::iterator it = find_if(v.begin(), v.end(), GreaterFive());	// 匿名函数对象
+if(it == v.end()){
+    cout << "未找到" << endl;
+}
+else{
+    cout << "找到大于5的数" << endl;
+}
+```
+
+
+
+# 排序
+
+对于支持随机访问迭代器的容器，都可以利用`sort()`算法直接对其进行排序
+
+````cpp
+#include <algorithm>
+sort(iterator beg, iterator end);	// 对[beg, end)区间内元素进行排序  默认：从小到大升序
+````
+
+## 自定义数据类型实现排序
+
+对于自定义数据类型，必须要指定排序规则，否则编译器不知道如何进行排序
+
+-----
+
+Person 自定义数据类型排序
+
+按年龄进行升序，如果年龄相同按照身高进行降序
+
+```cpp
+#include <list>
+#include <string>
+
+class Person{
+public:
+	Person(string name, int age, int height){
+		m_Name = name;
+		m_Age = age;
+		m_height = height;
+	}
+	string m_Name;
+	int m_Age;
+	int m_Height;
+};
+
+bool ComparePerson(Person& p1, Person& p2){
+	if(p1.m_Age == p2.m_Age){
+		return p1.m_Height > p2.m_Height;
+	}
+	else{
+		return p1.m_Age < p2.m_Age;
+	}
+}
+
+list<Person> l;
+Person p1("刘备", 45, 175);
+Person p2("曹操", 30, 180);
+l.sort(ComparePerson);
 ```
 
