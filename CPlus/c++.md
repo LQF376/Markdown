@@ -120,30 +120,66 @@ C++ 标准库提供了 **string** 类类型
 
 C++提供4种类型转换：静态转换、动态转换、常量转换、重新解释转换
 
-### 静态转换`Static Cast`
+### 静态转换`Static_Cast`
 
 - 将一种数据类型的值强制转换为另一种数据类型的值
 - 不进行任何运行时的类型检查，可能会导致运行时错误
 
-```
+```cpp
 int i = 10;
 float f = static_cast<float>(i);	// int ---> float
 ```
 
-### 动态类型转换`Dynamic Cast`
+主要有以下几种用法：
 
-- 将一个基类指针或引用转换为派生类指针或引用
-- 在运行时进行类型转换，如果不能进行转换则返回空指针或引发异常
+- 用于类层次结构中基类和派生类之间指针或引用的转换
+  - 上行转换（派生类的指针或引用转换成基类）是安全的
+  - 下行转换（基类的指针或引用转换为派生类），由于没有动态类型检查，所以是不安全的
+- 用于基本数据类型之间的转换，如把int转换成char。这种转换的安全也要开发人员来保证
+- 把空指针转换成目标类型的空指针
+
+### 动态类型转换`dynamic_cast`
+
+由于需要使用到类的多态性，经常将一个父类的指针指向子类对象，但是又想访问子类中的一些信息
+
+需要将一个父类的指针/引用转化为子类的指针/引用（下行转换）
+
+- 基类必须要有虚函数，因为 `dynamic_cast`是运行时类型信息，而这个信息时存储在类的虚函数表中
+- 对于下行转换，dynamic_cast 是安全的（当类型不一致时，转换过来的是空指针），而`static_cast`是不安全的
+- 对指针进行 `dynamic_cast`，失败返回 NULL，成功返回正常 cast 后的对象指针；对引用进行 dynamic_cast，失败抛出一个异常，成功返回正常 cast 后的对象引用
 
 ```c++
-class Base{};
+class Base{}{
+public:
+    virtual int test(){return 0;}		// 父类必须要有虚函数
+};
 
-class SubClass:public Base{};
+class SubClass:public Base{
+public:
+    int test(){return 0;}
+};
 Base *ptr_base = new SubClass;
 SubClass *ptr_subclass = dynamic_cast<SubClass*>(ptr_base);		// 将基类指针转换为派生类指针
+
+SubClass base;
+Base& ref_base = base;
+SubClass& ref_subclass = dynamic_case<SubClass&>(ref_subclass);	  // 将基类对象的引用转换派生类对象的引用
 ```
 
-###  常量转换`Const Cast`
+#### dynamic_cast 底层实现原理：
+
+`dynamic_cast` 在运行时进行类型检查的过程依赖于**运行时类型信息（`RTTI`）**和虚表指针（`vptr`)。`type_info`是 C++ Standard 所定义的类型描述器，`type_info`中放置着每个类的类型信息。`virtual table`的第一个`slot`存有`type_info`的地址
+
+`dynamic_cast` 的工作原理可以分为以下几个步骤：
+
+- 获取对象的实际类型
+- 通过对象的虚表指针（vptr），可以找到对象的虚表（vtable）
+- 虚表中包含指向虚函数的指针和类型信息（RTTI）
+- 类型检查：检查对象的实际类型是否与目标类型兼容。如果兼容，转换成功；否则，返回`nullptr`（对于指针）或抛出`std::bad_cast`异 常（对于引用）
+
+###  常量转换`const_cast`
+
+常量指针/引用与非常量指针/引用之间的转换
 
 - 将const类型的对象转换为非const类型的对象
 - 只能用于转换掉const属性，不能改变对象的类型
@@ -158,10 +194,31 @@ int& r = const_cast<int&>(i);	// const int ---> int
 - 将一个数据类型的值重新解释为另一个数据类型的值，通常用于在不同数据类型之间进行转换
 - 不进行任何类型检查，因此可能会导致未定义行为
 
-```
+```cpp
 int i = 10;
 float f = reinterpret_cast<float&>(i);	//	 int ---> float
 ```
+
+### 不相关类型的转换 reinterpret_cast
+
+用在任意指针/引用类型之间的转换
+
+能够将整数转换为指针，也可以把指针转换成整型或数组
+
+- `reinterpret_cast`是从底层对数据进行重新解释，依赖具体的平台，可移植性差，不到万不得已，不建议使用
+
+```cpp
+int value = 100;
+// 1. 用在任意指针/引用类型之间的转换
+double* pd = reinterpret_cast<double*>(&value);
+cout << *pd << endl;
+// 2. reinterpret_cast 能够将指针转化为整形值
+int* pv = &value;
+int pvaddr = reinterpret_cast<int>(pv);
+cout << hex << pvaddr << endl;
+```
+
+
 
 # 2. 变量定义/声明
 
@@ -3714,7 +3771,7 @@ thread() noexcept;
 
 创建一个 `std::thread` 对象，该 `std::thread` 对象可被 `joinable`，新产生的线程会调用 `fn` 函数，该函数的参数由 `args` 给出
 
-`Fn`：可调用对象：函数指针/函数对象/Lambda表达式
+`Fn`：可调用对象：**函数指针**/**函数对象**/**Lambda表达式**
 
 ```cpp
 template<class Fn, Class...Args>
@@ -3733,7 +3790,7 @@ thread(const thread&) = delete;
 thread(thread&& x) noexcept;
 ```
 
-注意：可被 `joinable` 的 `thread` 对象必须在他们销毁之前被主线程 `join` 或者将其设置为 `detached`.
+注意：**可被 `joinable` 的 `thread` 对象必须在他们销毁之前被主线程 `join` 或者将其设置为 `detached`.**
 
 ---
 
@@ -4032,6 +4089,116 @@ void sleep_until( const std::chrono::time_point<Clock,Duration>& sleep_time );
 std::chrono::milliseconds dura(2000);
 std::this_thread::sleep_for(dura);
 ```
+
+# `<mutex>` 库
+
+C++11 引入`<mutex>` 库，其中包含互斥锁 mutex 的类和函数
+
+互斥锁 mutex 是一个用于控制对共享资源访问的同步原语。当一个线程需要访问共享资源时，它会尝试锁定互斥锁。如果互斥锁已经被其他线程锁定，请求线程将被阻塞，直到互斥锁被释放【**一种同步机制，防止多线程同时访问共享资源**】
+
+![image-20240806224620079](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240806224620079.png)
+
+<mutex> 头文件主要提供以下主要类：
+
+- `std::mutex` 基本互斥锁
+- `std::recursive_mutex` 递归互斥锁，允许同一个线程多次锁定
+- `std::timed_mutex` 具有超时功能的互斥锁
+- `std::recursive_timed_mutex` 具有超时功能的递归互斥锁
+
+## std::mutex
+
+demo 如下：
+
+```cpp
+#include <iostream>
+#include <thread>
+#include <mutex>
+
+std::mutex mtx; // 全局互斥锁
+int shared_resource = 0;
+
+void increment() {
+    for (int i = 0; i < 10000; ++i) {
+        mtx.lock(); // 锁定互斥锁
+        ++shared_resource;
+        mtx.unlock(); // 解锁互斥锁
+    }
+}
+
+int main() {
+    std::thread t1(increment);
+    std::thread t2(increment);
+
+    t1.join();
+    t2.join();
+
+    std::cout << "Final value of shared_resource: " << shared_resource << std::endl;
+    return 0;
+}
+```
+
+### 成员函数
+
+![image-20240806225016103](https://raw.githubusercontent.com/LQF376/image/main/img/image-20240806225016103.png)
+
+**构造函数：**
+
+- `std::mutex` 不允许拷贝构造/移动拷贝，最初产生的 mutex 对象处于 unlock 状态
+
+**`lock()`**
+
+- 调用线程将锁住该互斥量，线程调用该函数会发生以下 3 种情况：
+  - 如果该互斥量当前没有被锁住，则调用线程将该互斥量锁住，直到 unlock 之前，该线程一直拥有该锁
+  - 如果当前互斥量被其他线程锁住，则当前的调用线程**被阻塞住**
+  - **如果当前互斥量被当前调用线程锁住，则会产生死锁(deadlock)**
+
+**`unlock()`**
+
+- 解锁，释放对互斥量的所有权
+
+**`try_lock()`**
+
+- 尝试锁住互斥量，如果互斥量被其他线程占有，则当前线程也**不会被阻塞**
+- 线程调用该函数会出现以下 3 种情况：
+  - 如果当前互斥量没有被其他线程占有，则该线程锁住互斥量，直到该线程调用 unlock 释放互斥量
+  - 如果当前互斥量被其他线程锁住，则当前调用线程返回 false，而并不会被阻塞掉
+  - **如果当前互斥量被当前调用线程锁住，则会产生死锁(deadlock)**
+
+## std::recursive_mutex
+
+`std::recursive_mutex` 允许**同一个线程对互斥量多次上锁**（即递归上锁）来获得对互斥量对象的多层所有权
+
+**`std::recursive_mutex` 释放互斥量时需要调用与该锁层次深度相同次数的 unlock**
+
+其他用法同 mutex
+
+## std::time_mutex
+
+相对于 metux 多了两个成员函数
+
+**`bool try_lock_for(const chrono::duration<Rep, Period>& Rel_time)`**
+
+- 接受一个**时间范围**，表示在**这段时间范围之内线程如果没有获得锁则被阻塞住**，如果在此期间其他线程释放了锁，则该线程可以上锁，如果超时（指定时间内没有获得锁），则返回 false
+
+**`bool try_lock_until(const xtime* Abs_time)`**
+
+- 接受一个**时间点**，表示在指定时间点到来之前线程如果没有获得锁则被阻塞住，如果在此期间其他线程释放了锁，则该线程可以上锁，如果超时（指定时间点之前未获得锁），则返回 false
+
+## std::recursive_timed_mutex 
+
+同理于 `std::time_mutex`
+
+## std::lock_guard
+
+lock_guard 对象用于管理某个锁对象，支持 RAII 机制
+
+```cpp
+template<class Mutex> class lock_guard;		// mutex 可以是recursive_mutex、time_mutex ...
+```
+
+**在某个 lock_guard 对象的声明周期内，它所管理的锁对象会一直保持上锁状态；而 lock_guard 的生命周期结束之后，它所管理的锁对象会被解锁**
+
+
 
 # `<chrono>`库
 
@@ -4397,6 +4564,38 @@ reserve(int len);		// 容器预留len个元素长度预留位置不初始化【�
 ```cpp
 vector<int> v;
 v.reserve(1000);
+```
+
+vector 是自动扩容的，当存入大量的数据后，并且对容器进行了删除操作，容器并不会自动归还被删除元素相应的内存，需要手动运行 `shrink_to_fit()` 释放这部分内存
+
+```cpp
+std::vector<int> v;
+std::cout << "size:" << v.size() << std::endl;         // 输出 0
+std::cout << "capacity:" << v.capacity() << std::endl; // 输出 0
+
+// 如下可看出 std::vector 的存储是自动管理的，按需自动扩张
+// 但是如果空间不足，需要重新分配更多内存，而重分配内存通常是性能上有开销的操作
+v.push_back(1);
+v.push_back(2);
+v.push_back(3);
+std::cout << "size:" << v.size() << std::endl;         // 输出 3
+std::cout << "capacity:" << v.capacity() << std::endl; // 输出 4
+
+// 这里的自动扩张逻辑与 Golang 的 slice 很像
+v.push_back(4);
+v.push_back(5);
+std::cout << "size:" << v.size() << std::endl;         // 输出 5
+std::cout << "capacity:" << v.capacity() << std::endl; // 输出 8
+
+// 如下可看出容器虽然清空了元素，但是被清空元素的内存并没有归还
+v.clear();                                             
+std::cout << "size:" << v.size() << std::endl;         // 输出 0
+std::cout << "capacity:" << v.capacity() << std::endl; // 输出 8
+
+// 额外内存可通过 shrink_to_fit() 调用返回给系统
+v.shrink_to_fit();
+std::cout << "size:" << v.size() << std::endl;         // 输出 0
+std::cout << "capacity:" << v.capacity() << std::endl; // 输出 0
 ```
 
 ## `string`
@@ -5419,10 +5618,10 @@ cout << "3 ref:" << p1.use_count() << endl;
 //~Test()
 ```
 
-shared_ptr 独有的常规操作
+### shared_ptr 独有的常规操作
 
 ```cpp
-make_shared<T> (args)	// 返回一个 shared_ptr，指向一个动态分配的类型为T的对象，使用args初始化此对象
+make_shared<T> (args) // 返回一个 shared_ptr，指向一个动态分配的类型为T的对象，使用args初始化此对象
 shared_ptr<T> p(q)		// p是shared_ptr q 的拷贝，此操作会递增q中的引用计数，q中指针必须能转换T*
 p = q	// p和q都是shared_ptr，所保存的指针必须能相互转换，此操作会递减p中引用计数，递增q中引用计数。
 		// 若p中引用计数变为0，则将其管理的原内存释放
@@ -5437,6 +5636,16 @@ p.reset()		// 若p是唯一指向其对象的shared_ptr，reset会释放此对�
 p.reset(q)		// 若传递了可选的参数内置指针q，会令p指向q，否则会将p置为空
 p.reset(q, d)	// 若还传递了参数d，将会调用d，而不是delete来释放q
 ```
+
+- `get()`获取原始指针
+- `reset()`减少一个引用计数
+
+```
+auto pointer = std::make_shared<int>(10);
+int* p = pointer.get();
+```
+
+
 
 shared_ptr 循环引用会导致堆内存无法正确释放，导致内存泄漏
 
@@ -5468,6 +5677,65 @@ int main(){
 // 程序结束，析构函数不会被调用，内存没有被释放
 ```
 
+### shared_ptr 底层原理
+
+<img src="https://raw.githubusercontent.com/LQF376/image/main/img/7dcf8260-9a67-4f7b-84e8-f8928da071e2.png" alt="img" style="zoom:67%;" />
+
+内部有两个指针成员，一个指针所管理的数据的地址；还有一个指针是控制块的地址，包括引用计数、weak_ptr 计数、删除器(Deleter)、分配器(Allocator)
+
+因为不同 shared_ptr 指针需要共享相同的内存对象，因此**引用计数的存储是在堆上的**
+
+```cpp
+template<typename T>
+class shared_ptr {
+public:
+	// constructor
+	shared_ptr(T* ptr = nullptr) : m_ptr(ptr), m_refCount(new int(1)) {}
+
+	// copy constructor
+	shared_ptr(const shared_ptr& other) : m_ptr(other.m_ptr), 
+    									m_refCount(other.m_refCount) {
+    	// increase the reference count
+    	(*m_refCount)++;
+	}
+
+	// destructor
+	~shared_ptr() {
+    	// decrease the reference count
+    	(*m_refCount)--;
+    	// if the reference count is zero, delete the pointer
+    	if (*m_refCount == 0) {
+        	delete m_ptr;
+        	delete m_refCount;
+    	}
+	}
+
+	// overload operator=()
+	shared_ptr& operator=(const shared_ptr& other) {
+    	// check self-assignment
+    	if (this != &other) {
+        	// decrease the reference count for the old pointer
+        	(*m_refCount)--;
+        	// if the reference count is zero, delete the pointer
+        	if (*m_refCount == 0) {
+            	delete m_ptr;
+            	delete m_refCount;
+        	}
+        	// copy the data and reference pointer and increase the reference count
+            m_ptr = other.m_ptr;
+        	m_refCount = other.m_refCount;
+        	// increase the reference count
+        	(*m_refCount)++;
+    	}
+    	return *this;
+	}
+
+private:
+    T* m_ptr;            // points to the actual data
+    int* m_refCount;     // reference count
+};
+```
+
 ## weak_ptr
 
 - 为了解决循环引用问题，引入 `weak_ptr`
@@ -5476,4 +5744,136 @@ int main(){
 - `weak_ptr` 没有重载 `operator*` 和 `->`，这是特意的，因为它不共享指针，不能操作资源，这是它弱的原因
 - 如要操作资源，则必须使用一个非常重要的成员函数 `lock()` 从被观测的 `shared_ptr` 获得一个可用的 `shared_ptr` 对象，从而操作资源
 
-独占式智能指针，确保了只有一个指针可以指向资源，`std::move()`将资源所有权转移给其他 unique_ptr
+创建一个 `weak_ptr` 时，要用一个 `shared_ptr` 来初始化它
+
+```cpp
+auto p = make_shared<int> (42);
+weak_ptr<int> wp(p);		// wp 弱共享p；p 的引用计数未改变
+```
+
+使用 `weak_ptr` 解决上述循环引用问题
+
+```cpp
+class Parent;		// Person 类的前置声明
+
+class Child{
+public:
+	Child() {cout << "hello child" << endl;}
+	~Child() {cout << "bye child" << endl;}
+	
+    // 测试函数
+    void testWork(){
+        cout << "testWork()" << endl;
+    }
+    
+	weak_ptr<Parent> father;
+};
+
+class Parent{
+public:
+	Parent() {cout << "hello Parent" << endl;}
+	~Parent() {cout << "bye parent" << endl;}
+	
+	weak_ptr<Child> son;
+};
+
+int main(){
+    shared_ptr<Parent> parent(new Parent());		// 资源A
+	shared_ptr<Chlid> child(new Child());			// 资源B
+	parent->son = child;		// 资源B的引用计数为1，资源A的引用计数为1【weak_ptr不改变计数引用】
+	child->father = parent;		// 资源A的引用计数为1，资源B的引用计数为1【weak_ptr不改变计数引用】
+    cout << parent.use_count() << child.use_count() << endl;	// 1 1
+    shared_ptr<Child> tmp = parent.get()->son.lock();
+    temp->testWork();
+    cout << tmp.use_count() << endl;		// 2
+}
+```
+
+### `weak_ptr` 常用操作
+
+```cpp
+weak_ptr<T> w;		// 空 weak_ptr 可以指向类型为T的对象
+weak_ptr<T> w(shared_ptr p);	// 与p指向相同对象的 weak_ptr,T必须能转换为p指向的类型
+w = p;	// p 可以是 shared_ptr 或者 weak_ptr，赋值后w和p共享对象
+w.reset();	// weak_ptr 置为空
+w.use_count();		// 与w共享对象的 shared_ptr 的计数
+w.expired();		// w.use_count() 为0，则返回true，否则返回 false
+w.lock();	// w.expired()为true，返回空的shared_ptr;否则返回指向w的shared_ptr
+```
+
+### weak_ptr 可以作为 shared_ptr 的构造函数参数
+
+`weak_ptr`可以作为`shared_ptr`的构造函数参数，但如果`weak_ptr`指向的对象已经被释放，那么`shared_ptr`的构造函数会抛出`bad_weak_ptr`异常
+
+```cpp
+std::shared_ptr<int> sp1(new int(22));
+std::weak_ptr<int> wp = sp1; 		// point to sp1
+std::shared_ptr<int> sp2(wp);
+std::cout<<sp2.use_count()<<std::endl; 	// 2
+sp1.reset();
+std::shared_ptr<int> sp3(wp); 	// throw std::bad_weak_ptr
+```
+
+
+
+## unique_ptr
+
+独占式智能指针，确保了只有一个指针可以指向资源，
+
+不允许赋值和拷贝操作，只能够移动，`std::move()`将资源所有权转移给其他 `unique_ptr`
+
+```cpp
+unique_ptr<int> ptr1 (new int(0));
+unique_ptr<int> ptr2 = ptr1;	// 错误，不能复制
+unique_ptr<int> ptr3 = move(ptr1)	// 可以移动
+```
+
+C++14 中，对于 `unique_ptr` 引入了 `make_unique` 方法进行初始化
+
+```cpp
+unique_ptr<string> ptr1 (new string("this is a unique_ptr"));
+unique_ptr<string> ptr2 = make_unique<string>("this is a unique_ptr");
+```
+
+### unique_ptr 常用操作
+
+```cpp
+unique_ptr<T> u1; 		// 空unique_ptr，可以指向类型为T的对象。u1会使用delete来释放它的指针
+unique_ptr<T, D> u2; 	// u2会使用一个类型为D的可调用对象来释放它的指针
+unique_ptr<T, D> u(d); 	// 空unique_ptr，指向类型为T的对象，用类型为D的对象d替代delete
+u = nullptr; 	// 释放u指向的对象，将u置为空
+u.release(); 	// u放弃对指针的控制权，返回raw pointer，并将u置为空
+u.reset(); 		// 释放u指向的对象
+u.reset(q); 	// 如果提供了内置指针q，另u指向这个对象；否则将u置为空
+u.reset(nullptr);   
+```
+
+```cpp
+// release()
+unique<int> p1 = make_unique<int> (1);
+int* a = p1.release();
+cout << *a << endl;
+delete(a);		// release() 后 一定要记得手动 delete
+```
+
+```
+// reset()
+unique_ptr<int> p1 = make_unique<int>(1);
+p1.reset();
+std::cout<<p1.get()<<std::endl; // 0
+```
+
+### unique_ptr 和 shared_ptr 共有的操作
+
+```cpp
+p.get()		// 返回p中保存的指针，不会影响p的引用计数
+p.reset()	// 释放p指向的对象，将p置为空
+p.reset(q)	// 释放p指向的对象，令p指向q
+p.reset(new T)		// 释放p指向的对象，令p指向一个新的对象
+p.swap(q)		// 交换p和q中的指针
+swap(p, q)		// 交换p和q中的指针
+p.operator*()	// 解引用p
+p.operator->()	// 成员访问运算符，等价于(*p).member
+p.operator bool()			// 检查p是否为空指针
+```
+
