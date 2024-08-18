@@ -4198,7 +4198,860 @@ template<class Mutex> class lock_guard;		// mutex 可以是recursive_mutex、tim
 
 **在某个 lock_guard 对象的声明周期内，它所管理的锁对象会一直保持上锁状态；而 lock_guard 的生命周期结束之后，它所管理的锁对象会被解锁**
 
+lock_guard 对象构造时，传入的 mutex 对象会被当前线程锁住，在lock_guard 对象被析构时，它所管理的 mutex 对象会自动解除，不需要程序员手动调用 lock 或者 unlock 对 mutex 进行上锁和解锁的操作【尤其是在处理异常的情况下】
 
+### 构造函数
+
+- **`locking`** ：lock_guard 对象管理 mutex 对象 m，并在构造时对 m 进行上锁
+- **`adopting`**：lock_guard 对象管理 mutex 对象 m，但 m 已被当前线程锁住
+- 拷贝构造：拷贝构造/移动构造均被禁用
+
+```cpp
+// locking
+explict lock_guard(mutex_type& m);
+// adopting
+lock_guard(mutex_type& m, adopt_lock_t tag);
+// copy[delete]
+lock_guard(const lock_guard&) = delete;
+```
+
+```cpp
+std::mutex mtx;           // mutex for critical section
+ 
+void print_thread_id(int id) {
+	mtx.lock();
+	std::lock_guard<std::mutex> lck(mtx, std::adopt_lock);
+	std::cout << "thread #" << id << '\n';
+}
+ 
+int main(){
+	std::thread threads[10];
+	// spawn 10 threads:
+	for (int i = 0; i<10; ++i)
+		threads[i] = std::thread(print_thread_id, i + 1);
+ 
+	for (auto& th : threads) th.join();
+ 
+	return 0;
+}
+```
+
+## std::unique_lock
+
+以独占所有权的方式管理 mutex 对象的上锁和解锁操作，即没有其他的 unique_lock 对象同时拥有某个 mutex 对象的所有权，相较于 lock_guard 提供了更好的上锁和解锁控制
+
+### 构造函数
+
+1. 默认构造函数：新创建的 unique_lock 对象不管理任何 mutex 对象
+2. locking： unique_lock 对象管理 mutex 对象 m，并尝试调用 `m.lock()` 对 mutex 对象进行上锁，如果此时另外某个 unique_lock 对象已经管理了该 mutex 对象 m，则当前线程将会被阻塞
+3. try-locking：新创建的 unique_lock 对象管理 mutex 对象 m，并尝试调用 `m.try_lock()` 对 mutex 对象进行上锁，但如果上锁不成功，并不会阻塞当前线程。
+4. deferred：新创建的 unique_lock 对象管理 mutex 对象 m，但是在初始化的时候并不锁住 mutex 对象【m 应该是一个没有被当前线程锁住的 mutex 对象】
+5. adopting：新创建的 unique_lock 对象管理 mutex 对象 m， m 是一个已经被当前线程锁住的 mutex 对象
+6. locking for：新创建的 unique_lock 对象管理 mutex 对象 m，并试图通过调用 `m.try_lock_for(rel_time)` 来锁住 Mutex 对象一段时间
+7. locking until：通过调用 `m.try_lock_until(abs_time)` 来在某个时间点(abs_time)之前锁住 mutex 对象
+8. copy：unique_lock 对象不能被拷贝构造
+9. move：新创建的 unique_lock 对象获得了由 x 所管理的 mutex 对象的所有权(包括当前 mutex 的状态)，x 如同默认构造函数创建一般，不再管理任何 mutex 对象
+
+```cpp
+// 1. 默认构造函数
+unique_lock() noexcept;
+// 2. locking
+explicit unique_lock(mutex_type& m);
+// 3. try-locking
+unique_lock(mutex_type& m, try_to_lock_t tag);
+// 4. deferred
+unique_lock(mutex_type& m, defer_lock_t tag);
+// 5. adopting
+unique_lock(mutex_type& m, adopt_lock_t tag);
+// 6. locking for
+template <class Rep, class Period>
+unique_lock(mutex_type& m, const chrono::duration<Rep,Period>& rel_time);
+// 7. locking until
+template <class Clock, class Duration>
+unique_lock(mutex_type& m, const chrono::time_point<Clock,Duration>& abs_time);
+// 8. copy[delete]
+unique_lock(const unique_lock&) = delete;
+// 9. unique_lock(unique_lock&& x);
+```
+
+```cpp
+std::mutex foo, bar;
+ 
+void task_a() {
+	std::lock(foo, bar);         // simultaneous lock (prevents deadlock)
+	std::unique_lock<std::mutex> lck1(foo, std::adopt_lock);
+	std::unique_lock<std::mutex> lck2(bar, std::adopt_lock);
+	std::cout << "task a\n";
+	// (unlocked automatically on destruction of lck1 and lck2)
+}
+ 
+void task_b() {
+	// foo.lock(); bar.lock(); // replaced by:
+	std::unique_lock<std::mutex> lck1, lck2;
+	lck1 = std::unique_lock<std::mutex>(bar, std::defer_lock);
+	lck2 = std::unique_lock<std::mutex>(foo, std::defer_lock);
+	std::lock(lck1, lck2);       // simultaneous lock (prevents deadlock)
+	std::cout << "task b\n";
+	// (unlocked automatically on destruction of lck1 and lck2)
+}
+ 
+ 
+int main(){
+	std::thread th1(task_a);
+	std::thread th2(task_b);
+ 
+	th1.join();
+	th2.join();
+ 
+	return 0;
+}
+```
+
+# <condition_variable> 库
+
+条件变量用于阻塞一个或多个线程，直到某个线程修改线程间的共享变量，并通过 condition_variable 通知其余阻塞线程，从而使得已阻塞的线程可以继续处理后续的操作
+
+条件变量的使用主要涉及两个方面：
+
+- 通知已阻塞线程，共享变量已改变
+- 用于阻塞某一线程，直至该线程被唤醒
+
+## 用于通知
+
+可分为两部
+
+1. 获取互斥量 std::mutex，通常使用 `std::lock_guard` 来完成
+2. 在持有锁的期间，在条件变量 `std::condition_variable` 上执行 `notify_one` 或 `notify_all` 唤醒阻塞线程
+
+相关函数原型
+
+```cpp
+void notify_one() noexcept;
+void notify_all() noexcept;
+```
+
+notify_one 用于唤醒等待在条件变量上的单个线程
+
+如果有多个线程在条件变量上等待，只有其中一个线程会被唤醒，具体是哪个线程C++标准没有规定，所以不确定
+
+被唤醒的线程将尝试获取与条件变量关联的互斥锁，一旦成功获取锁，它就可以继续执行
+
+----
+
+notify_all 用于唤醒等待在条件变量上的所有线程
+
+如果有多个线程在条件变量上等待，这些线程都会被唤醒
+
+唤醒的线程将竞争获取与条件变量关联的互斥锁，然后可以继续执行
+
+------
+
+## 用于阻塞
+
+可以分三步：
+
+1. 使用 `std::unique_lock<std::mutex>` 来实现加锁操作，使得可以在相同的互斥量 `mutex` 上保护共享变量
+2. 执行 `wait`、`wait_for` 或 `wait_until`，能够原子性的释放互斥量 mutex 上的锁，并阻塞这个线程
+3. 当条件变量 `condition_variable` 被通知，超时或虚假唤醒时，该线程结束阻塞状态，并自动的获取到互斥量 `mutex` 上的锁（这里应该检查是为虚假唤醒）
+
+相关函数原型
+
+```c++
+void wait(unique_lock<mutex>& lck);
+
+template<class Pred> 
+void wait(unique_lock<mutex>& lock, Pred pred);
+
+template<class Clock, class Duration>
+cv_status wait_until(unique_lock<mutex>& lock, 
+					const chrono::time_point<Clock, Duration>& abs_time);
+					
+template<class Clock, class Duration, class Pred> 
+bool wait_until(unique_lock<mutex>& lock, 
+				const chrono::time_point<Clock, Duration>& abs_time, Pred pred);
+				
+template<class Rep, class Preiod>
+cv_status wait_for(unique_lock<mutex>& lock, 
+					const chrono::duration<Rep, Period>& rel_time);
+
+template<class Rep, class Preiod, class Pred>
+bool wait_for(unique_lock<mutex>& lock, 
+				const chrono::duration<Rep, Period>& rel_time, Pred pred);
+```
+
+-----
+
+`wait()` 用于阻塞线程并等待唤醒
+
+在调用 wait 之前，必须获取一个独占锁，并将它传递给 `wait()` 函数
+
+如果条件变量当前不满足，线程将被阻塞，同时释放锁，使得其他线程可以继续执行
+
+当另一个线程带哦用 `notify_one()` 或 `notify_all()` 来通知条件变量时，被阻塞的线程将被唤醒，并再次尝试获得锁
+
+`wait()` 返回时，锁会被再次持有
+
+wait 有个带谓词的版本，可以简化对条件的判断，仅仅有当 `pred` 条件为 `false` 时才会调用 `wait()` 阻塞当前线程，解决唤醒丢失问题，而且只有收到其他线程通知当 `pred` 返回 `true` 时，才会解除阻塞，解决虚假唤醒
+
+```cpp
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+std::mutex lock;
+std::condition_variable condVar;
+
+bool dataReady{false};
+
+void waitingForWork() {
+    std::cout << "Waiting ..." << std::endl;
+    std::unique_lock<std::mutex> l(lock);
+    condVar.wait(l, []{return dataReady;});           // (4)
+    std::cout << "Running ..." << std::endl;
+}
+
+void setDataReady() {
+    {
+        std::lock_guard<std::mutex> l{lock};
+        dataReady = true;
+    }
+    std::cout << "Data prepared, notify one" << std::endl;
+    condVar.notify_one();                             // (3)
+}
+
+int main() {
+    std::cout << "==========Begin==========" << std::endl;
+
+    std::thread t1(waitingForWork);                    // (1)
+    std::thread t2(setDataReady);                      // (2)
+
+    t1.join();
+    t2.join();
+
+    std::cout << "===========End===========" << std::endl;
+}
+```
+
+````cpp
+==========Begin==========
+Waiting ...
+Data prepared, notify one
+Running ...
+===========End===========
+````
+
+-----
+
+wait_for 可以设定一个超时时间
+
+在调用 wait_for() 之前，必须获取一个独占锁 std::unique_lock 并将它传递给 wait_for() 函数
+
+如果条件变量在指定的超时时间内变为满足，线程将被唤醒，并且 wait_for() 返回 cv_status::no_timeout
+
+如果超时时间到期且仍未收到唤醒通知，wait_for() 返回 `cv_status::timeout`，线程继续执行
+
+wait_for 同样带有一个谓词版本，用法同 wait
+
+----
+
+wait_until 接受一个绝对时间点作为参数
+
+线程将等待直到指定的绝对时间点，如果在该时间点之前变量条件满足，他将返回并继续执行
+
+如果达到指定时间点仍未收到唤醒通知，wait_until 返回 cv_status::timeout，线程继续执行
+
+wait_until 函数也有一个谓词版本，用法同 wait() 函数
+
+----
+
+## 唤醒丢失和虚假唤醒
+
+唤醒丢弃：唤醒丢失的现象是发送方在接收方进入等待状态之前发送通知，导致通知消失。因此，当通知丢失后，接收方将一直处于等待状态
+
+虚假唤醒：尽管没有发生通知，但接收者也可能会被唤醒
+
+## 进入等待的工作流程
+
+在等待的初始化处理中，该线程锁定互斥锁，然后检查谓词 `[]{return detaReady;}`
+
+- 如果谓词返回
+  - true：线程继续工作
+  - false：`condVar.wait()` 解锁互斥并将线程置于等待（阻塞）状态
+  
+- 如果条件变量 `condVar` 处于等待状态并收到通知或被虚假唤醒，则会发生
+
+  - 线程被解除阻塞，并重新获得互斥锁
+
+  - 线程检查谓词
+
+  - 如果谓词的返回值为：
+
+    `true`：线程继续其工作
+
+    `false`：`condVar.wait()` 解锁互斥并将线程置于等待（阻塞）状态
+
+没有谓词的版本：
+
+````cpp
+//conditionVariablesWithoutPredicate.cpp
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <chrono>
+
+std::mutex lock;
+std::condition_variable condVar;
+
+void waitingForWork() {
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    std::cout << "Waiting ..." << std::endl;
+    std::unique_lock<std::mutex> l(lock);
+    condVar.wait(l);                                     //(1)
+    std::cout << "Running ..." << std::endl;
+}
+
+void setDataReady() {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << "Data prepared, notify one" << std::endl;
+    condVar.notify_one();                                //(2)
+}
+
+int main() {
+    std::cout << "==========Begin==========" << std::endl;
+
+    std::thread t1(waitingForWork);
+    std::thread t2(setDataReady);
+
+    t1.join();
+    t2.join();
+
+    std::cout << "===========End===========" << std::endl;
+}
+````
+
+会出现唤醒丢失，造成死锁
+
+```cpp
+==========Begin==========
+Data prepared, notify one
+Waiting ...
+```
+
+## 使用 atomic 去掉发送者的锁
+
+```cpp
+//conditionVariablesAtomic.cpp
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#include <atomic>
+
+std::mutex lock;
+std::condition_variable condVar;
+
+std::atomic<bool> dataReady{false};
+
+void waitingForWork() {
+    std::cout << "Waiting ..." << std::endl;
+    std::unique_lock<std::mutex> l(lock);
+    condVar.wait(l, []{return dataReady.load();});
+    std::cout << "Running ..." << std::endl;
+}
+
+void setDataReady() {
+    dataReady = true;
+    std::cout << "Data prepared, notify one" << std::endl;
+    condVar.notify_one();
+}
+
+int main() {
+    std::cout << "==========Begin==========" << std::endl;
+
+    std::thread t1(waitingForWork);
+    std::thread t2(setDataReady);
+
+    t1.join();
+    t2.join();
+
+    std::cout << "===========End===========" << std::endl;
+}
+```
+
+接受线程在进入等待状态时，拿到锁准备检查谓词状态时，收到发送线程的唤醒信息，造成唤醒丢失，产生死锁
+
+# std::future
+
+std::future 期待一个返回，提供了一个访问异步操作的途径；C++标准库使用 std::future 为一次性事件建模，如果一个事件需要等待特定的一次性事件，那么这个线程可以获取一个 future 对象来代表这个事件
+
+异步调用往往不知道何时返回，但是如果异步调用的过程需要同步，或者说后一个异步调用需要使用前一个异步调用的结果，这时候就需要用到 future
+
+线程可以周期性的在这个 future 上等待一小段事件，检查 future 是否已经 ready，如果没有，该线程可以先去做另一个任务，一旦 future 就绪，该 future 就无法复位（无法再次使用这个 future 等待这个事件），所以 future 代表的是一次性事件
+
+## future 类型
+
+`<future>` 头文件中声明了两种：`std::feature` 和 `std::shared_future`，类同于 `unique_ptr` 和 `shared_ptr`，前者的实例是仅有的一个指向其关联事件的实例，而后者可以有多个实例指向同一个关联事件，当事件就绪时，所有指向同一事件的 `std::shared_future` 实例会变成就绪
+
+## future 使用
+
+std::future 是一个模板，模板参数就是期待返回的类型
+
+虽然 future 被用于线程间通信，但其本身却并不提供同步访问，必须通过互斥量或者其他同步机制来保护访问
+
+future 使用的时机：当你不需要立刻得到一个结果的时候，你可以开启一个线程帮你去做一项任务，并期待这个任务的返回，但是 std::thread 并没有提供这样的机制，这就需要用到 std::async 和 std::future
+
+---
+
+## std::async
+
+`std::async` 返回一个 `std::feature` 对象，而不是给你一个确定的值（所以当你不需要立刻使用此值的时候才需要用到这个机制），当你需要使用这个值的时候，对 future 使用`get()`，线程就会阻塞直到 future 就绪，然后返回该值
+
+````cpp
+#include <future>
+#include <iostream>
+
+int find_result_to_add(){
+	return 1 + 1;
+}
+
+void do_other_things() {
+	std::cout << "Hello World" << std::endl;
+}
+
+int main(){
+	std::future<int> result = std::async(find_result_to_add);
+	do_other_things();
+	std::cout << result.get() << std::endl;
+	return 0;
+}
+````
+
+async 允许你通过将额外地参数添加到调用中，来将附加参数传递给函数。
+
+如果传入的函数指针是某个类的成员函数，则还需要将类对象指针传入（直接传入、传入指针或者 std::ref 封装）
+
+默认情况下，std::async 是否启动一个新线程，或者在等待 future 时，任务是否同步运行取决于你给的参数
+
+这个参数为 std::launch 类型：
+
+- std::launch::deferred 表明该函数会被延迟调用，直到在 future 上调用 get() 或者 wait() 为止
+- std::launch::async 表明函数会在自己创建的线程上运行
+- std::launch::any = std::launch::deferred | std::launch::async【默认的参数设置】
+- std::launch::sync = std::launch::deferred
+
+```cpp
+enum class launch{
+	async,
+	deferred,
+	sync = deferred,
+	any = deferred | async
+};
+```
+
+## std::packaged_task
+
+`std::packaged_task` 是一个模板类（定义如下），用于打包任务（可调用对象/函数/Lambda表达式/bind表达式），以便异步地执行它，并获取其结果。
+
+`std::packaged_task`目的是为了封装任务以便在线程之间传递，实现任务地异步处理
+
+```cpp
+template<typename FunctionType>
+class packaged_task; // undefined
+
+template<typename ResultType,typename... ArgTypes>
+class packaged_task<ResultType(ArgTypes...)>
+{
+public:
+    packaged_task() noexcept;
+    packaged_task(packaged_task&&) noexcept;
+    ~packaged_task();
+
+    packaged_task& operator=(packaged_task&&) noexcept;
+
+    packaged_task(packaged_task const&) = delete;
+    packaged_task& operator=(packaged_task const&) = delete;
+
+    void swap(packaged_task&) noexcept;
+
+    template<typename Callable>
+    explicit packaged_task(Callable&& func);
+
+    template<typename Callable,typename Allocator>
+    packaged_task(std::allocator_arg_t, const Allocator&,Callable&&);
+
+    bool valid() const noexcept;
+    std::future<ResultType> get_future();
+    void operator()(ArgTypes...);
+    void make_ready_at_thread_exit(ArgTypes...);
+    void reset();
+};
+```
+
+## packaged_task 基本使用方法
+
+`packaged_task` 封装的函数的计算结果会通过与之关联的 `future::get` 获取（可以在其他线程中异步获取）。
+
+关联的 `future` 可以通过 `packaged_task::get_future` 获取，该方法只能调用一次，多次调用会触发 `std::future_error` 异常
+
+## packaged_task 使用场景
+
+- 异步任务执行：将任务封装起来，并稍后在A线程中执行它。在B线程获取结果
+- 线程池：在实现线程池时，可以使用 packaged_task 封装任务，并将其提交到线程池中
+- 任务取消和重试：通过packaged_task 将任务封装，方便管理任务的取消和重试
+
+`std::packaged_task` 的模板参数是函数签名：`int add(int a, int b)` 的函数签名为 `int(int, int)`
+
+```cpp
+#include <future>
+#include <iostream>
+
+int add(int a, int b)
+{
+	return a + b;
+}
+
+void do_other_things() 
+{
+	std::cout << "Hello World" << std::endl;
+}
+
+int main()
+{
+	std::packaged_task<int(int, int)> task(add);
+	do_other_things();
+	std::future<int> result = task.get_future();
+	task(1, 1); //必须要让任务执行，否则在get()获取future的值时会一直阻塞
+	std::cout << result.get() << std::endl;
+	return 0;
+}
+```
+
+std::bind 用于创建一个新的可调用对象，将函数与部分或者全部参数绑定，从而生成一个新的函数对象或函数指针。这个新对象可以存储并在稍后调用，而不需要再次提供参数。结合 std::packaged_task 和 std::bind 可以方便地封装和调度任务
+
+```cpp
+#include <iostream>
+#include <future>
+#include <thread>
+#include <functional>
+
+int packagedTaskMethod(int val, std::string str) {
+    std::cout << "run packagedTaskMethod: val = " << val << " , str = " << str << std::endl;
+    return 555999;
+}
+
+void task2() {
+    auto boundTask = std::bind(packagedTaskMethod, 42, std::placeholders::_1);
+    std::packaged_task<int(std::string)> task1(boundTask);
+    
+    std::future<int> ret1 = task1.get_future();
+    std::thread t(std::move(task1), "hhh");
+    
+    std::cout << "Result: " << ret1.get() << std::endl;
+    t.join();
+}
+
+int main() {
+    task2();
+    return 0;
+}
+```
+
+# std::atomic
+
+多个线程共享一个简单的类型变量时，同时对这个变量进行操作时，不用锁会导致混乱（一条语句底层被拆分成3条4条汇编处理）
+
+原子变量 `std::atomic` 提供一种线程安全的方式来访问和修改共享数据，不会导致数据的竞争，可以用于在不同的线程之间同步内存访问，在多核 CPU 情况下，当某个 CPU 核心开始运行原子操作时，会先暂时暂停其他 CPU 内核对内存的操作
+
+原子变量支持各种数据类型，如整数、布尔值、指针等，用于执行原子操作
+
+原子操作是不可分割的操作，可以确保在多线程环境中线程安全地执行
+
+使用 std::atomic 需包含头文件 <atomic>
+
+## std::atomic_flag
+
+`atomic_flag` 是原子布尔类型
+
+不同于`std::atomic<bool>`，`atomic_flag` 不提供加载或存储操作；对象可以**在两个状态间切换：设置和清除**
+
+```cpp
+/* 原型 */
+// atomic_flag类型
+struct atomic_flag
+{
+    atomic_flag() noexcept = default;
+    atomic_flag(const atomic_flag&) = delete;
+    atomic_flag& operator=(const atomic_flag&) = delete;
+    atomic_flag& operator=(const atomic_flag&) volatile = delete;
+
+    bool test_and_set(memory_order = memory_order_seq_cst) volatile noexcept;
+    bool test_and_set(memory_order = memory_order_seq_cst) noexcept;
+    void clear(memory_order = memory_order_seq_cst) volatile noexcept;
+    void clear(memory_order = memory_order_seq_cst) noexcept;
+};
+
+bool atomic_flag_test_and_set(volatile atomic_flag*) noexcept;
+bool atomic_flag_test_and_set(atomic_flag*) noexcept;
+bool atomic_flag_test_and_set_explicit(volatile atomic_flag*, memory_order) noexcept;
+bool atomic_flag_test_and_set_explicit(atomic_flag*, memory_order) noexcept;
+void atomic_flag_clear(volatile atomic_flag*) noexcept;
+void atomic_flag_clear(atomic_flag*) noexcept;
+void atomic_flag_clear_explicit(volatile atomic_flag*, memory_order) noexcept;
+void atomic_flag_clear_explicit(atomic_flag*, memory_order) noexcept;
+
+#define ATOMIC_FLAG_INIT unspecified
+```
+
+### 默认构造函数
+
+atomic_flag 可以使用 `ATOMIC_FLAG_INIT` 进行初始化，这样初始化的 atomic_flag 是 clear 状态的，
+
+如果在初始化时没有明确使用 `ATOMIC_FLAG_INIT 初始化`，那么新创建的 std::atomic_flag 对象的状态是未指定的（unspecified）（既没有被 set 也没有被 clear。）另外，atomic_flag不能被拷贝，也不能 move 赋值
+
+### atomic_flag::test_and_set 
+
+检查实例的状态标志并自动设置实例状态
+
+### atomic_flag::clear
+
+清除原子变量的状态标识，支持`std::memory_order_relaxed`,`std::memory_order_release`和`std::memory_order_seq_cst`中任意一个
+
+----
+
+atomic_flag 可用作自旋锁的实现
+
+```cpp
+class spinlock_mutex{
+	std::atomic_flag flag;
+public:
+	spinlock_mutex():
+	flag(ATOMIC_FLAG_INIT) { }
+	
+	void lock(){
+    	while(flag.test_and_set(std::memory_order_acquire));
+    	}
+  	
+  	void unlock(){
+  		flag.clear(std::memory_order_release);
+  		}
+};
+```
+
+## std::atomic
+
+std::atomic 模板允许用户使用自定义类型创建一个原子变量，条件是必须有拷贝赋值运算符，这个类型不能有任何虚函数或者虚基类，以及必须使用编译器创建的拷贝赋值操作，此外自定义类型中的所有的基类和非静态数据成员也需要支持拷贝赋值操作
+
+```cpp
+template < class T > struct atomic {
+    bool is_lock_free() const volatile;			// 7
+    bool is_lock_free() const;					// 7
+    void store(T, memory_order = memory_order_seq_cst) volatile;		// 8
+    void store(T, memory_order = memory_order_seq_cst);					// 8
+    T load(memory_order = memory_order_seq_cst) const volatile;			// 9
+    T load(memory_order = memory_order_seq_cst) const;					// 9
+    operator  T() const volatile;		// 6
+    operator  T() const;				// 6
+    T exchange(T, memory_order = memory_order_seq_cst) volatile;		// 10
+    T exchange(T, memory_order = memory_order_seq_cst);					// 10
+    bool compare_exchange_weak(T &, T, memory_order, memory_order) volatile;	// 11
+    bool compare_exchange_weak(T &, T, memory_order, memory_order);				// 11
+    bool compare_exchange_strong(T &, T, memory_order, memory_order) volatile;
+    bool compare_exchange_strong(T &, T, memory_order, memory_order);
+    bool compare_exchange_weak(T &, T, memory_order = memory_order_seq_cst) volatile;//12
+    bool compare_exchange_weak(T &, T, memory_order = memory_order_seq_cst);		 //12
+    bool compare_exchange_strong(T &, T, memory_order = memory_order_seq_cst) volatile;
+    bool compare_exchange_strong(T &, T, memory_order = memory_order_seq_cst);
+    atomic() = default;						// 1
+    constexpr atomic(T);					// 2
+    atomic(const atomic &) = delete;		// 3
+    atomic & operator=(const atomic &) = delete;				// 5
+    atomic & operator=(const atomic &) volatile = delete;		// 5
+    T operator=(T) volatile;		// 4
+    T operator=(T);					// 4
+};
+```
+
+### 构造函数
+
+- （1）默认构造函数：原子对象处于未初始化状态，后续可用 `std::atomic_init`完成初始化。
+
+  默认初始化的 `std::atomic<T>` 不含 `T` 对象，它仅有的合法用法是析构以及后面使用 `std::atomic_init` 对他进行初始化
+
+- （2）以 `val` 初始化底层值。该初始化非原子
+
+- （3）无法复制/移动原子对象
+
+```cpp
+std::atomic<int> a;
+std::atomic_init(&a, 1);
+std::atomic<int> b(2);
+
+std::atomic<int> c(b);  // error
+```
+
+### atomic::operator=
+
+- （4）将 `val` 值赋给原子变量。等价于 `store(val)` 。
+
+  若 `std::atomic<T>::is_always_lock_free` 为 false 则该操作是原子的，内存序(Memory Order) 默认为顺序一致性(`std::memory_order_seq_cst`)，需要指定其他的内存序，需使用 `std::atomic::store()`
+
+- （5）原子对象没有定义的复制赋值，但是注意它们是可以隐式地转换为类型T
+
+```cpp
+std::atomic<int> a = 1;
+a= 2;
+std::atomic<int> b = a;  // error
+```
+
+### atomic::operator()
+
+- （6）原子地加载并返回原子变量的当前值。等价于 `load()`
+
+```cpp
+std::atomic<int> foo = 0;
+std::atomic<int> bar = 0;
+
+bar = static_cast<int>(foo); 
+std::cout << "bar: " << bar << '\n'; 
+foo == 0；
+```
+
+ ### atomic::is_lock_free
+
+- （7）检查此类型所有对象上的原子操作是否免锁
+
+  若此类型所有对象上的原子操作免锁则为 true ，否则为 false
+
+注：std::atomic_flag 以外的所有原子类型可用互斥或其他锁定操作实现，而不一定用免锁的原子 CPU 指令。亦允许原子类型*有时*免锁，例如若给定架构上仅对齐的内存访问是天然原子的，则同类型的错误对齐对象必须用锁
+
+```cpp
+struct A { int a[100]; };
+struct B { int x, y; };
+
+std::atomic<A>{}.is_lock_free();
+std::atomic<B>{}.is_lock_free();
+```
+
+### atomic::store
+
+- （8）原子地以 `val` 替换当前值
+
+  按照 `order` 的值影响内存，`order` 必须是以下之一。否则行为未定义
+
+  - std::memory_order_relaxed
+  - std::memory_order_release
+  - std::memory_order_seq_cst
+
+```cpp
+std::atomic<int> foo (0);
+
+foo.store(2, std::memory_order_relaxed);
+```
+
+### atomic::load
+
+- （9）原子地加载并返回原子变量的当前值
+
+  按照 order 的值影响内存，order 必须是以下之一。否则行为未定义
+
+  - std::memory_order_relaxed
+  - std::memory_order_consume
+  - std::memory_order_acquire
+  - std::memory_order_seq_cst
+
+```cpp
+std::atomic<int> foo (0);
+
+int b = foo.load(std::memory_order_relaxed);
+```
+
+### atomic::exchange
+
+- （10）原子地替换原子对象的值并返回它先前持有的值，操作为读-修改-写操作；根据 order 的值影响内存
+
+```cpp
+std::atomic<bool> winner (false);
+
+bool flag = winner.exchange(true);
+```
+
+### atomic::compare_exchange_weak
+
+- （11）原子地比较 `*this` 和 `expected` 的对象表示，而若它们逐位相等，则以`val`替换前者（进行读修改写操作）。否则，将`*this`中的实际值加载进`expected`（进行加载操作）
+
+  注：对于一个T类型的对象，其对象表示 (object representation) 是和它开始于同一个地址，且长度为 `sizeof(T)` 的一段 unsigned char（或等价的 std::byte） (C++17 起)类型的对象序列
+
+- （12）读修改写和加载操作的内存模型分别为 `success` 和 `failure`
+
+```cpp
+struct Node { int value; Node* next; };
+std::atomic<Node*> list_head (nullptr);
+
+void append (int val) {     // append an element to the list
+  Node* oldHead = list_head;
+  Node* newNode = new Node {val,oldHead};
+
+  // what follows is equivalent to: list_head = newNode, but in a thread-safe way:
+  while (!list_head.compare_exchange_weak(oldHead,newNode))
+    newNode->next = oldHead;
+}
+
+int main (){
+  // spawn 10 threads to fill the linked list:
+  std::vector<std::thread> threads;
+  for (int i=0; i<10; ++i) threads.push_back(std::thread(append,i));
+  for (auto& th : threads) th.join();
+
+  // print contents:
+  for (Node* it = list_head; it!=nullptr; it=it->next)
+    std::cout << ' ' << it->value;
+  std::cout << '\n';
+
+  // cleanup:
+  Node* it; while (it=list_head) {list_head=it->next; delete it;}
+
+  return 0;
+}
+```
+
+```
+7 4 5 9 8 6 3 1 2 0
+```
+
+### atomic::compare_exchange_strong
+
+功能与weak版本一样，唯一的区别就是：弱版本允许(spuriously 地)返回 false(即原子对象所封装的值与参数 expected 的物理内容相同，但却仍然返回 false)，即使在预期的实际情况与所包含的对象相比较时也是如此
+
+对于非循环算法来说， compare_exchange_strong 通常是首选
+
+```cpp
+std::atomic<int>  ai;
+ 
+int  tst_val= 4;
+int  new_val= 5;
+bool exchanged= false;
+
+exchanged= ai.compare_exchange_strong( tst_val, new_val );		// false; tst_val = 3
+```
+
+-----
+
+并非所有的类型都能提供原子操作，原子操作的可行性取决于**具体的 CPU 架构**，以及所实例化的**类型结构是否能够满足该 CPU 架构对内存对齐** 条件的要求
+
+可以通过 `std::atomic<T>::is_lock_free` 来检查该原子类型是否需支持原子操作
+
+```cpp
+struct A {
+    float x;
+    int y;
+    long long z;
+};
+
+int main() {
+    std::atomic<A> a;
+    std::cout << std::boolalpha << a.is_lock_free() << std::endl;
+    return 0;
+}
+```
 
 # `<chrono>`库
 
