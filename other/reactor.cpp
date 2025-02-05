@@ -97,7 +97,8 @@ int send_cb(int fd)
     return count;
 }
 
-int main()
+/// 目的为了增大服务端的端口数量
+int Init_server(unsigned short port)
 {
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -106,7 +107,7 @@ int main()
 
     serveraddr.sin_family = AF_INET;
     serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serveraddr.sin_port = htons(8080);
+    serveraddr.sin_port = htons(port);
 
     if(-1 == bind(sockfd, (struct sockaddr*)&serveraddr, sizeof(struct sockaddr)))
     {
@@ -116,12 +117,23 @@ int main()
 
     listen(sockfd, 10);
 
-    connList[sockfd].fd = sockfd;
-    connList[sockfd].recv_t.accept_callback = accept_cb;
+    return sockfd;
+}
+
+int main()
+{
+    int port_count = 10;
+    unsigned short port = 2048;
 
     epfd = epoll_create(1);
 
-    set_event(sockfd, EPOLLIN, 1);
+    for(int i = 0; i < port_count; ++i)
+    {
+        int sockfd = Init_server(port + i);
+        connList[sockfd].fd = sockfd;
+        connList[sockfd].recv_t.accept_callback = accept_cb;
+        set_event(sockfd, EPOLLIN, 1);
+    }
 
     struct epoll_event events[1024] = {0};
     while(1)
